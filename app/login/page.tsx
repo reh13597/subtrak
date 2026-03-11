@@ -1,23 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { signIn, signUp, confirmSignUp, resendSignUpCode } from "aws-amplify/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2, Mail, Lock, User, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 
-export default function AuthPage() {
+function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialMode = searchParams.get("mode") === "signup" ? "signup" : "login";
-  
+
   const [mode, setMode] = useState<"login" | "signup" | "confirm">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [confirmationCode, setConfirmationCode] = useState("");
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -79,7 +79,7 @@ export default function AuthPage() {
     setIsLoading(true);
     try {
       await confirmSignUp({ username: email, confirmationCode });
-      
+
       // Auto sign-in after confirmation
       await signIn({ username: email, password });
 
@@ -87,7 +87,12 @@ export default function AuthPage() {
       const dbResponse = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, firstName, lastName, password }), // Schema includes password field
+        body: JSON.stringify({ 
+          Email: email, 
+          FirstName: firstName, 
+          LastName: lastName, 
+          Password: password 
+        }),
       });
 
       if (!dbResponse.ok) {
@@ -123,8 +128,8 @@ export default function AuthPage() {
             {mode === "confirm" ? "Check Email" : "Welcome Back."}
           </h2>
           <p className="mt-3 text-white/60 text-lg">
-            {mode === "confirm" 
-              ? `We sent a code to ${email}` 
+            {mode === "confirm"
+              ? `We sent a code to ${email}`
               : "One step away from greatness."}
           </p>
         </div>
@@ -144,8 +149,8 @@ export default function AuthPage() {
         )}
 
         <form className="mt-8 space-y-6 relative" onSubmit={
-          mode === "login" ? handleLogin : 
-          mode === "signup" ? handleSignup : 
+          mode === "login" ? handleLogin :
+          mode === "signup" ? handleSignup :
           handleConfirm
         }>
           <div className="space-y-4">
@@ -264,5 +269,17 @@ export default function AuthPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#155885]" size={40} />
+      </div>
+    }>
+      <AuthForm />
+    </Suspense>
   );
 }
