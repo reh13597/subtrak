@@ -8,6 +8,11 @@ import Footer from "@/components/Footer";
 
 Amplify.configure(amplifyConfig);
 
+export const metadata = {
+  title: "SubTrak",
+  description: "Track and manage your subscriptions with ease.",
+};
+
 export default function RootLayout({
   children,
 }: {
