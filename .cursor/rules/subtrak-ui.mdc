@@ -1,0 +1,40 @@
+---
+description: UI component patterns and shadcn/ui rules for SubTrak
+alwaysApply: true
+---
+
+# SubTrak UI Rules
+
+## Component Library
+- Use shadcn/ui components first: Dialog, Card, Form, Input, Button, Table, Badge, Select, Sheet, Toast, DropdownMenu, Skeleton
+- Custom components only when shadcn has no equivalent
+- Keep the dark glassmorphism theme: `bg-white/5`, `border-white/10`, `backdrop-blur`
+
+## Every Screen Must Include
+- Loading state (skeleton or spinner)
+- Empty state (icon + message + CTA)
+- Error state (alert with retry option)
+- Success feedback (toast or inline message)
+
+## Forms
+- React Hook Form + Zod for all forms
+- Reusable form field components where practical
+- Inline validation messages
+- Disable submit button during pending requests
+- Consistent field styling via shadcn Form components
+
+## Dashboard UX
+- Metrics readable at a glance (MetricCard components)
+- Subscription list supports search and filter
+- Clicking a subscription opens a Dialog/modal
+- Add/edit/delete interactions feel immediate (optimistic UI or fast refetch)
+
+## Responsive Design
+- Mobile-first approach
+- Test all layouts at 375px, 768px, and 1280px breakpoints
+- Navigation collapses to hamburger menu on mobile (already implemented)
+
+## Accessibility
+- All interactive elements must be keyboard-accessible
+- Use semantic HTML elements
+- Include aria-labels on icon-only buttons

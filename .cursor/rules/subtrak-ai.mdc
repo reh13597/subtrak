@@ -1,0 +1,45 @@
+---
+description: Gemini AI integration rules for SubTrak statement extraction
+alwaysApply: true
+---
+
+# SubTrak AI Rules
+
+## Model
+- Use `gemini-3-flash-preview` via `@google/generative-ai`
+- API key: `process.env.GEMINI_API_KEY` (server-side only, never expose to client)
+
+## Extraction Schema
+Gemini must return structured JSON matching this Zod schema:
+```typescript
+z.array(z.object({
+  name: z.string(),
+  price: z.number(),
+  currency: z.string(),
+  billingCycle: z.enum(['MONTHLY', 'YEARLY', 'WEEKLY', 'CUSTOM']),
+  providerUrl: z.string().url().optional(),
+  confidenceScore: z.number().min(0).max(1),
+}))
+```
+
+## Validation
+- Always validate Gemini output with Zod before using it
+- If confidence < 0.6, mark the extraction for user review
+- If required fields are missing, reject that entry
+- Never trust AI output directly; it is a suggestion, not truth
+
+## User Confirmation
+- Extracted subscriptions are previewed to the user before saving
+- User must accept/reject each extracted item
+- Preserve original extraction metadata (`rawJson`) for debugging
+
+## Statement Parsing
+- Validate file type (PDF, CSV) and size (max 10MB) before upload
+- Handle malformed or empty files gracefully
+- Separate upload logic (`/api/upload/statement`) from extraction logic (`/api/extract/[uploadId]`)
+- Return clear processing statuses: PENDING, PROCESSING, DONE, FAILED
+
+## Error Handling
+- Wrap Gemini calls in try/catch; handle rate limits with exponential backoff
+- If Gemini returns invalid JSON, log the raw response and return a user-friendly error
+- Never crash the server on malformed AI responses

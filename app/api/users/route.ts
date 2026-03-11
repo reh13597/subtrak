@@ -1,17 +1,26 @@
 import { NextResponse } from "next/server";
-import db from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 
-export async function POST(req: Request) {
-  const { Email, Password, FirstName, LastName, DateJoined } = await req.json();
-
+export async function POST(request: Request) {
   try {
-    const dateJoined = DateJoined || new Date().toISOString().slice(0, 19).replace('T', ' ');
-    await db.query(
-      "INSERT INTO User (Email, Password, FirstName, LastName, DateJoined) VALUES (?, ?, ?, ?, ?)",
-      [Email, Password, FirstName, LastName, dateJoined]
-    );
-    return NextResponse.json({ message: "User created!" });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const { cognitoId, email, firstName, lastName } = await request.json();
+
+    if (!cognitoId || !email) {
+      return NextResponse.json(
+        { error: "cognitoId and email are required" },
+        { status: 400 }
+      );
+    }
+
+    const user = await prisma.user.upsert({
+      where: { cognitoId },
+      update: { email, firstName, lastName },
+      create: { cognitoId, email, firstName, lastName },
+    });
+
+    return NextResponse.json(user);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to upsert user";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

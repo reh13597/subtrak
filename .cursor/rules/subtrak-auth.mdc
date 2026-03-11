@@ -1,0 +1,32 @@
+---
+description: Authentication rules for AWS Cognito / Amplify in SubTrak
+alwaysApply: true
+---
+
+# SubTrak Auth Rules
+
+## Stack
+- AWS Cognito via `aws-amplify` v6
+- Amplify configured in `components/AmplifyConfig.tsx` (client) and `lib/amplify-config.ts`
+- Session helpers in `lib/auth.ts`
+
+## Protected Routes
+- `/dashboard`, `/account`, `/subscriptions` require authentication
+- `middleware.ts` checks Cognito cookies; redirects unauthenticated users to `/login`
+- API routes verify user identity via `lib/auth.ts` before any data access
+
+## Data Scoping
+- All subscription queries MUST be scoped to the authenticated user's ID
+- Never fetch or mutate another user's data
+- Return 401 for unauthenticated and 403 for unauthorized access
+
+## Auth Flow
+- Signup -> Cognito `signUp` -> confirmation code -> `confirmSignUp` -> auto sign-in -> upsert user in DB
+- Login -> Cognito `signIn` -> redirect to dashboard
+- Logout -> Cognito `signOut` -> redirect to home
+
+## Rules
+- Keep Cognito config centralized in `lib/amplify-config.ts`
+- Never place sensitive auth logic in client components if it belongs on the server
+- Always provide user-friendly auth error messages (not raw Cognito errors)
+- `AmplifyConfig` component must use `'use client'` directive
