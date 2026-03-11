@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import db from "@/lib/db";
-import { getCurrentUser } from "aws-amplify/auth/server";
 
 export async function POST(req: Request) {
-  const { email, firstName, lastName } = await req.json();
+  const { Email, Password, FirstName, LastName, DateJoined } = await req.json();
 
   try {
+    const dateJoined = DateJoined || new Date().toISOString().slice(0, 19).replace('T', ' ');
     await db.query(
-      "INSERT INTO users (id, email, first_name, last_name) VALUES (UUID(), ?, ?, ?)",
-      [email, firstName, lastName]
+      "INSERT INTO User (Email, Password, FirstName, LastName, DateJoined) VALUES (?, ?, ?, ?, ?)",
+      [Email, Password, FirstName, LastName, dateJoined]
     );
     return NextResponse.json({ message: "User created!" });
   } catch (err: any) {
