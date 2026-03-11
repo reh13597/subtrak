@@ -3,6 +3,7 @@
 import { Amplify } from "aws-amplify";
 import { amplifyConfig } from "@/lib/amplify-config";
 import "./globals.css";
+import Navbar from "@/components/Navbar";
 
 Amplify.configure(amplifyConfig);
 
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="antialiased">
+        <Navbar />
+        {children}
+      </body>
     </html>
   );
 }
