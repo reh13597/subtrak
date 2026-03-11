@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { authHeadersFormData, authHeaders } from "@/lib/client-auth";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = [
@@ -19,12 +20,10 @@ type UploadStatus = "idle" | "uploading" | "extracting" | "done" | "error";
 
 interface StatementUploaderProps {
   onUploadComplete: (uploadId: number) => void;
-  cognitoId: string;
 }
 
 export function StatementUploader({
   onUploadComplete,
-  cognitoId,
 }: StatementUploaderProps) {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
@@ -110,9 +109,10 @@ export function StatementUploader({
       const formData = new FormData();
       formData.append("file", file);
 
+      const uploadHeaders = await authHeadersFormData();
       const uploadRes = await fetch("/api/upload/statement", {
         method: "POST",
-        headers: { "x-user-cognito-id": cognitoId },
+        headers: uploadHeaders,
         body: formData,
       });
 
@@ -125,9 +125,10 @@ export function StatementUploader({
 
       setStatus("extracting");
 
+      const extractHeaders = await authHeaders();
       const extractRes = await fetch(`/api/extract/${uploadId}`, {
         method: "POST",
-        headers: { "x-user-cognito-id": cognitoId },
+        headers: extractHeaders,
       });
 
       if (!extractRes.ok) {

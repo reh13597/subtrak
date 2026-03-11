@@ -1,12 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { getCurrentUser } from "aws-amplify/auth";
 import { Hub } from "aws-amplify/utils";
 import { syncCurrentUserToDb } from "@/lib/sync-user";
+import { authHeaders } from "@/lib/client-auth";
+import { clearTokenCache } from "@/lib/client-auth";
 
 interface UserProfile {
-  cognitoId: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
@@ -35,12 +36,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [cognitoId, setCognitoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasSynced = useRef(false);
 
-  const fetchProfile = useCallback(async (cId: string) => {
+  const fetchProfile = useCallback(async () => {
     try {
-      const res = await fetch("/api/users/profile", {
-        headers: { "x-user-cognito-id": cId },
-      });
+      const headers = await authHeaders();
+      const res = await fetch("/api/users/profile", { headers });
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
@@ -55,8 +56,13 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       const currentUser = await getCurrentUser();
       const cId = currentUser.userId;
       setCognitoId(cId);
-      await syncCurrentUserToDb();
-      await fetchProfile(cId);
+
+      if (!hasSynced.current) {
+        await syncCurrentUserToDb();
+        hasSynced.current = true;
+      }
+
+      await fetchProfile();
     } catch {
       setCognitoId(null);
       setProfile(null);
@@ -69,10 +75,16 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     init();
 
     const unsubscribe = Hub.listen("auth", ({ payload }) => {
-      if (payload.event === "signedIn") init();
+      if (payload.event === "signedIn") {
+        hasSynced.current = false;
+        clearTokenCache();
+        init();
+      }
       if (payload.event === "signedOut") {
         setCognitoId(null);
         setProfile(null);
+        hasSynced.current = false;
+        clearTokenCache();
       }
     });
 
@@ -80,7 +92,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   }, [init]);
 
   const refreshProfile = useCallback(async () => {
-    if (cognitoId) await fetchProfile(cognitoId);
+    if (cognitoId) await fetchProfile();
   }, [cognitoId, fetchProfile]);
 
   const displayName =

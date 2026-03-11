@@ -14,7 +14,6 @@ export async function GET(request: Request) {
     const user = await requireAuth(request);
     return NextResponse.json({
       id: user.id,
-      cognitoId: user.cognitoId,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
@@ -39,7 +38,6 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({
       id: updated.id,
-      cognitoId: updated.cognitoId,
       email: updated.email,
       firstName: updated.firstName,
       lastName: updated.lastName,

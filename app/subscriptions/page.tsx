@@ -25,6 +25,7 @@ import {
   ExtractedPreview,
   type ExtractedItem,
 } from "@/components/upload/ExtractedPreview";
+import { authHeaders } from "@/lib/client-auth";
 
 type ExtractionFlow = "upload" | "preview" | "confirmed";
 
@@ -63,9 +64,8 @@ export default function SubscriptionsPage() {
     setUploadId(id);
     setLoadingItems(true);
     try {
-      const res = await fetch(`/api/extract/${id}`, {
-        headers: { "x-user-cognito-id": cognitoId ?? "" },
-      });
+      const headers = await authHeaders();
+      const res = await fetch(`/api/extract/${id}`, { headers });
       if (res.ok) {
         const data = (await res.json()) as { items: ExtractedItem[] };
         setExtractedItems(data.items ?? []);
@@ -74,7 +74,7 @@ export default function SubscriptionsPage() {
     } finally {
       setLoadingItems(false);
     }
-  }, [cognitoId]);
+  }, []);
 
   const handleConfirm = () => {
     setFlowState("confirmed");
@@ -205,7 +205,7 @@ export default function SubscriptionsPage() {
                     </Button>
                   </div>
                 )}
-                <StatementUploader onUploadComplete={handleUploadComplete} cognitoId={cognitoId} />
+                <StatementUploader onUploadComplete={handleUploadComplete} />
               </>
             )}
 
@@ -222,7 +222,6 @@ export default function SubscriptionsPage() {
                 items={extractedItems}
                 uploadId={uploadId}
                 onConfirm={handleConfirm}
-                cognitoId={cognitoId}
               />
             )}
           </>

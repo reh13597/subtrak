@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { authHeaders } from "@/lib/client-auth";
 
 type SidebarTab = "profile" | "notifications" | "billing" | "security";
 
@@ -66,8 +67,8 @@ export default function AccountPage() {
     try {
       await signOut();
       router.push("/");
-    } catch (err) {
-      console.error("Error signing out: ", err);
+    } catch {
+      // sign out failed silently
     }
   }
 
@@ -87,12 +88,10 @@ export default function AccountPage() {
     if (!cognitoId) return;
     setSaving(true);
     try {
+      const headers = await authHeaders();
       const res = await fetch("/api/users/profile", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-cognito-id": cognitoId,
-        },
+        headers,
         body: JSON.stringify({
           firstName: editFirstName.trim() || null,
           lastName: editLastName.trim() || null,

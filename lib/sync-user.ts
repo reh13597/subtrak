@@ -1,4 +1,5 @@
 import { getCurrentUser, fetchUserAttributes } from "aws-amplify/auth";
+import { authHeaders } from "@/lib/client-auth";
 
 export async function syncCurrentUserToDb(): Promise<string | null> {
   try {
@@ -18,14 +19,14 @@ export async function syncCurrentUserToDb(): Promise<string | null> {
       // attributes may not be available in all contexts
     }
 
+    const headers = await authHeaders();
     const res = await fetch("/api/users", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ cognitoId, email, firstName, lastName }),
     });
 
     if (!res.ok) {
-      console.error("Failed to sync user to database:", await res.text());
       return null;
     }
 

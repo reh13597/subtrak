@@ -98,5 +98,47 @@ This file is a living document. Every time a runtime, build, or type error is en
 - Fix: Rewrote account page with editable profile fields (React Hook Form + Zod), functional toggle switches with state, API routes for GET/PUT user profile, and `syncCurrentUserToDb()` on load.
 - Prevention: Never ship static mockup UI for interactive features. Always wire up state management and API calls when building forms and toggles.
 
+## Security Fix: Authentication Forgeable via Client-Sent Header (CRITICAL)
+- Symptom: API routes trusted `x-user-cognito-id` header for authentication, allowing impersonation
+- Root cause: No server-side JWT verification. Any attacker could set this header to any Cognito ID.
+- Fix: Installed `aws-jwt-verify`. Rewrote `lib/auth.ts` to use `CognitoJwtVerifier` which verifies Cognito ID tokens against the JWKS endpoint. Created `lib/client-auth.ts` with `getIdToken()`, `authHeaders()`, and `authHeadersFormData()` helpers to send Bearer tokens from client. Updated ALL API calls and hooks to use JWT tokens instead of raw cognitoId headers.
+- Prevention: Never trust client-supplied identity headers. Always verify JWTs server-side. Use `requireAuth(request)` from `lib/auth.ts` in every API route.
+
+## Security Fix: /api/users POST Unauthenticated (CRITICAL)
+- Symptom: Anyone could POST to `/api/users` to create/update user records for any cognitoId
+- Root cause: The endpoint had zero authentication — it accepted any cognitoId in the body
+- Fix: Added JWT verification via `getVerifiedCognitoId(request)`. Validates that the JWT `sub` matches the submitted cognitoId. Added Zod input validation.
+- Prevention: Every API route that writes data must call `requireAuth()` or `getVerifiedCognitoId()`. Never accept unverified identity in request body.
+
+## Security Fix: cognitoId Leaked in Profile API Response (LOW)
+- Symptom: `GET /api/users/profile` returned `cognitoId` field to the client
+- Root cause: The response included all user fields without filtering
+- Fix: Removed `cognitoId` from the JSON response in both GET and PUT handlers
+- Prevention: Never return internal identifiers (cognitoId, AWS IDs) in API responses. Only return fields the client needs.
+
+## Security Fix: Unsafe Type Casts in Subscriptions API (MEDIUM)
+- Symptom: Query parameters for `status` and `billingCycle` used `as` casts without validation
+- Root cause: `searchParams.get()` returns raw strings that were cast to Prisma enum types without checking
+- Fix: Added Zod `querySchema` with `z.enum()` validation for `status`, `billingCycle`, and `z.string().max(200)` for `search`. Only validated values reach the Prisma query.
+- Prevention: Always validate query parameters with Zod before passing to database queries. Never use `as` casts on user input.
+
+## Security Fix: No Rate Limiting on Gemini Extraction (HIGH)
+- Symptom: A user could call `POST /api/extract/:id` unlimited times, running up Gemini API costs
+- Root cause: No rate limiting on the extraction endpoint
+- Fix: Created `lib/rate-limit.ts` with in-memory rate limiter. Applied to extract POST: 5 requests per hour per user. Returns 429 with retry-after when exceeded.
+- Prevention: All AI/external API endpoints must have rate limiting. Use `checkRateLimit()` from `lib/rate-limit.ts`.
+
+## Security Fix: Redundant syncCurrentUserToDb Calls (MEDIUM)
+- Symptom: `syncCurrentUserToDb()` called on every page load, making unnecessary API calls
+- Root cause: Every auth-protected page independently called sync on mount
+- Fix: Centralized sync to `UserProfileProvider` with a `hasSynced` ref that prevents re-syncing within the same session. Reset on sign-in/sign-out events.
+- Prevention: Use the `UserProfileProvider` as the single source of truth for user sync. Never call `syncCurrentUserToDb()` from individual pages.
+
+## Security Fix: console.error Leaking Sensitive Data (LOW)
+- Symptom: Error details (stack traces, auth errors) logged to browser console in production
+- Root cause: `console.error()` calls in catch blocks for sign-out and EmailJS errors
+- Fix: Removed all `console.error()` calls from client-side code. Errors are shown to users via toast notifications only.
+- Prevention: Never use `console.error()` in production client code. Use toast notifications for user-facing errors. For server-side, use structured logging.
+
 ---
 <!-- NEW ERRORS: Append below this line -->

@@ -1,26 +1,55 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getVerifiedCognitoId } from "@/lib/auth";
+import { z } from "zod";
+
+const syncUserSchema = z.object({
+  cognitoId: z.string().min(1),
+  email: z.string().email(),
+  firstName: z.string().max(100).optional().default(""),
+  lastName: z.string().max(100).optional().default(""),
+});
 
 export async function POST(request: Request) {
   try {
-    const { cognitoId, email, firstName, lastName } = await request.json();
+    const verifiedCognitoId = await getVerifiedCognitoId(request);
 
-    if (!cognitoId || !email) {
+    if (!verifiedCognitoId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const parsed = syncUserSchema.safeParse(body);
+
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "cognitoId and email are required" },
+        { error: parsed.error.issues.map((i) => i.message).join(", ") },
         { status: 400 }
       );
     }
 
+    if (parsed.data.cognitoId !== verifiedCognitoId) {
+      return NextResponse.json({ error: "Forbidden: cognitoId mismatch" }, { status: 403 });
+    }
+
     const user = await prisma.user.upsert({
-      where: { cognitoId },
-      update: { email, firstName, lastName },
-      create: { cognitoId, email, firstName, lastName },
+      where: { cognitoId: verifiedCognitoId },
+      update: {
+        email: parsed.data.email,
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+      },
+      create: {
+        cognitoId: verifiedCognitoId,
+        email: parsed.data.email,
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+      },
     });
 
-    return NextResponse.json(user);
+    return NextResponse.json({ id: user.id, email: user.email });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to upsert user";
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (err instanceof NextResponse) return err;
+    return NextResponse.json({ error: "Failed to upsert user" }, { status: 500 });
   }
 }

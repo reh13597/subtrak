@@ -16,6 +16,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { authHeaders } from "@/lib/client-auth";
 
 export interface ExtractedItem {
   id: number;
@@ -34,7 +35,6 @@ interface ExtractedPreviewProps {
   items: ExtractedItem[];
   uploadId: number;
   onConfirm: () => void;
-  cognitoId: string;
 }
 
 function confidenceBadge(score: number) {
@@ -70,7 +70,6 @@ export function ExtractedPreview({
   items,
   uploadId,
   onConfirm,
-  cognitoId,
 }: ExtractedPreviewProps) {
   const [decisions, setDecisions] = useState<Record<number, "ACCEPTED" | "REJECTED">>(() => {
     const initial: Record<number, "ACCEPTED" | "REJECTED"> = {};
@@ -116,12 +115,10 @@ export function ExtractedPreview({
     try {
       setSaving(true);
 
+      const headers = await authHeaders();
       const res = await fetch(`/api/extract/${uploadId}/confirm`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-cognito-id": cognitoId,
-        },
+        headers,
         body: JSON.stringify({ acceptedIds }),
       });
 

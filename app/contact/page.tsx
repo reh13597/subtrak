@@ -39,7 +39,6 @@ export default function ContactPage() {
             formRef.current?.reset();
           },
           (error) => {
-            console.error("EmailJS Error:", error);
             setStatus("error");
             setErrorMessage(error.text || "Failed to send message. Please try again.");
             setIsLoading(false);

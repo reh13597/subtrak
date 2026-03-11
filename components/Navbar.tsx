@@ -40,8 +40,8 @@ export default function Navbar() {
       await signOut();
       setIsDropdownOpen(false);
       router.push("/");
-    } catch (err) {
-      console.error("Error signing out: ", err);
+    } catch {
+      // sign out failed silently
     }
   }
 

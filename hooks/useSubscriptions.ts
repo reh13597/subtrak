@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { SubscriptionCreate } from "@/lib/validations/subscription";
+import { authHeaders } from "@/lib/client-auth";
 
 export interface Subscription {
   id: number;
@@ -29,20 +30,13 @@ export function useSubscriptions({ cognitoId }: UseSubscriptionsOptions) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getHeaders = (): Record<string, string> => {
-    const h: Record<string, string> = { "Content-Type": "application/json" };
-    if (cognitoId) h["x-user-cognito-id"] = cognitoId;
-    return h;
-  };
-
   const fetchSubscriptions = useCallback(async () => {
     if (!cognitoId) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/subscriptions", {
-        headers: { "x-user-cognito-id": cognitoId },
-      });
+      const headers = await authHeaders();
+      const res = await fetch("/api/subscriptions", { headers });
       if (!res.ok) throw new Error("Failed to fetch subscriptions");
       const data = await res.json();
       setSubscriptions(data.subscriptions ?? []);
@@ -60,9 +54,10 @@ export function useSubscriptions({ cognitoId }: UseSubscriptionsOptions) {
   const addSubscription = useCallback(
     async (data: SubscriptionCreate) => {
       if (!cognitoId) return;
+      const headers = await authHeaders();
       const res = await fetch("/api/subscriptions", {
         method: "POST",
-        headers: getHeaders(),
+        headers,
         body: JSON.stringify(data),
       });
       if (!res.ok) {
@@ -79,9 +74,10 @@ export function useSubscriptions({ cognitoId }: UseSubscriptionsOptions) {
   const updateSubscription = useCallback(
     async (id: number, data: Partial<SubscriptionCreate>) => {
       if (!cognitoId) return;
+      const headers = await authHeaders();
       const res = await fetch(`/api/subscriptions/${id}`, {
         method: "PUT",
-        headers: getHeaders(),
+        headers,
         body: JSON.stringify(data),
       });
       if (!res.ok) {
@@ -100,9 +96,10 @@ export function useSubscriptions({ cognitoId }: UseSubscriptionsOptions) {
   const deleteSubscription = useCallback(
     async (id: number) => {
       if (!cognitoId) return;
+      const headers = await authHeaders();
       const res = await fetch(`/api/subscriptions/${id}`, {
         method: "DELETE",
-        headers: { "x-user-cognito-id": cognitoId },
+        headers,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);

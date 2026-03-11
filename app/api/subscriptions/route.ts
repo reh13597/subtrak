@@ -3,26 +3,43 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { subscriptionCreateSchema } from "@/lib/validations/subscription";
 import { Prisma } from "@/lib/generated/prisma";
+import { z } from "zod";
+
+const querySchema = z.object({
+  search: z.string().max(200).optional(),
+  status: z.enum(["ACTIVE", "PAUSED", "CANCELLED"]).optional(),
+  billingCycle: z.enum(["MONTHLY", "YEARLY", "WEEKLY", "CUSTOM"]).optional(),
+});
 
 export async function GET(request: Request) {
   try {
     const user = await requireAuth(request);
 
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get("search");
-    const status = searchParams.get("status");
-    const billingCycle = searchParams.get("billingCycle");
+    const parsed = querySchema.safeParse({
+      search: searchParams.get("search") ?? undefined,
+      status: searchParams.get("status") ?? undefined,
+      billingCycle: searchParams.get("billingCycle") ?? undefined,
+    });
 
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues.map((i) => i.message).join(", ") },
+        { status: 400 }
+      );
+    }
+
+    const { search, status, billingCycle } = parsed.data;
     const where: Prisma.SubscriptionWhereInput = { userId: user.id };
 
     if (search) {
       where.name = { contains: search };
     }
     if (status) {
-      where.status = status as Prisma.EnumSubscriptionStatusFilter["equals"];
+      where.status = status;
     }
     if (billingCycle) {
-      where.billingCycle = billingCycle as Prisma.EnumBillingCycleFilter["equals"];
+      where.billingCycle = billingCycle;
     }
 
     const subscriptions = await prisma.subscription.findMany({
@@ -33,8 +50,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ subscriptions });
   } catch (err) {
     if (err instanceof NextResponse) return err;
-    const message = err instanceof Error ? err.message : "Failed to fetch subscriptions";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch subscriptions" }, { status: 500 });
   }
 }
 
@@ -54,10 +70,9 @@ export async function POST(request: Request) {
     return NextResponse.json(subscription, { status: 201 });
   } catch (err) {
     if (err instanceof NextResponse) return err;
-    if (err instanceof Error && err.name === "ZodError") {
-      return NextResponse.json({ error: (err as any).issues }, { status: 400 });
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: err.issues }, { status: 400 });
     }
-    const message = err instanceof Error ? err.message : "Failed to create subscription";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create subscription" }, { status: 500 });
   }
 }

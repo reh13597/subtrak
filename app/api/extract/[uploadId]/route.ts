@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { extractSubscriptionsFromFile, calculateNextBillingDate } from "@/lib/ai";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 type RouteParams = { params: Promise<{ uploadId: string }> };
+
+const EXTRACT_MAX_PER_WINDOW = 5;
+const EXTRACT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 export async function GET(request: Request, { params }: RouteParams) {
   try {
@@ -46,14 +50,28 @@ export async function GET(request: Request, { params }: RouteParams) {
     return NextResponse.json({ items });
   } catch (err) {
     if (err instanceof NextResponse) return err;
-    const message = err instanceof Error ? err.message : "Failed to fetch extractions";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch extractions" }, { status: 500 });
   }
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const user = await requireAuth(request);
+
+    const rateLimitKey = `extract:${user.id}`;
+    const { allowed, retryAfterMs } = checkRateLimit(
+      rateLimitKey,
+      EXTRACT_MAX_PER_WINDOW,
+      EXTRACT_WINDOW_MS
+    );
+
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Rate limit exceeded. Try again in ${Math.ceil(retryAfterMs / 60_000)} minute(s).` },
+        { status: 429 }
+      );
+    }
+
     const { uploadId } = await params;
     const id = parseInt(uploadId);
 
@@ -113,7 +131,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             nextBillingDate,
             confidenceScore: item.confidenceScore,
             reviewStatus: "PENDING",
-            rawJson: item as Record<string, unknown>,
+            rawJson: JSON.parse(JSON.stringify(item)),
           },
         });
       })
@@ -140,7 +158,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ items });
   } catch (err) {
     if (err instanceof NextResponse) return err;
-    const message = err instanceof Error ? err.message : "Extraction failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Extraction failed" }, { status: 500 });
   }
 }
