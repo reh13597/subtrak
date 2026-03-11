@@ -47,7 +47,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
           {/* Brand Section */}
           <div className="col-span-1 md:col-span-1 space-y-6">
-            <Link href="/" className="flex items-center space-x-2 group">
+            <Link href={user ? "/dashboard" : "/"} className="flex items-center space-x-2 group">
               <div className="w-8 h-8 rounded-lg bg-[#155885] flex items-center justify-center text-white font-bold transition-transform group-hover:scale-110">
                 S
               </div>

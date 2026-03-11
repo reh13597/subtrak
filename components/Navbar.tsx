@@ -79,7 +79,7 @@ export default function Navbar() {
     <nav className="sticky top-0 z-50 bg-[#155885] shadow-lg px-6 py-4">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="flex items-center space-x-2 group">
+        <Link href={user ? "/dashboard" : "/"} className="flex items-center space-x-2 group">
           <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#155885] font-bold text-xl shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
             S
           </div>
