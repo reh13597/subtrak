@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.1",
+    "@emailjs/browser": "^4.4.1",
     "aws-amplify": "^6.16.2",
     "dotenv": "^17.3.1",
     "lucide-react": "^0.577.0",

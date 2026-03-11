@@ -57,15 +57,15 @@ export default function Footer() {
               Take full control of your digital footprint and monthly spending with SubTrak's intelligent tracking system.
             </p>
             <div className="flex items-center space-x-4">
-              <Link 
-                href="#" 
+              <Link
+                href="https://github.com/reh13597/subtrak"
                 target="_blank"
                 className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60 hover:bg-[#155885]/20 hover:text-white transition-all border border-white/10"
               >
-                <Github size={20} />
+                <Github href="https://github.com/reh13597/subtrak" target="_blank" size={20} />
               </Link>
-              <Link 
-                href="/contact" 
+              <Link
+                href="/contact"
                 className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60 hover:bg-[#155885]/20 hover:text-white transition-all border border-white/10"
               >
                 <Mail size={20} />
@@ -111,7 +111,7 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
           <p className="text-white/20 text-xs">
-            &copy; 2026 SubTrak. All rights reserved. Made for CMPT 354.
+            &copy; 2026 SubTrak. All rights reserved.
           </p>
           <div className="flex items-center space-x-6 text-white/20">
             <div className="flex items-center space-x-1 hover:text-white/40 transition">
