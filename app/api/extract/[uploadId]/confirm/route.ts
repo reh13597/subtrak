@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { query, getConnection } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import type { StatementUpload, ExtractedSubscriptionRow } from "@/lib/types/database";
+import type { RowDataPacket } from "mysql2/promise";
 
 type RouteParams = { params: Promise<{ uploadId: string }> };
 
@@ -23,22 +25,26 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const upload = await prisma.statementUpload.findUnique({ where: { id } });
+    const uploads = await query<(StatementUpload & RowDataPacket)[]>(
+      "SELECT id, userId FROM StatementUpload WHERE id = ? LIMIT 1",
+      [id]
+    );
 
-    if (!upload) {
+    if (uploads.length === 0) {
       return NextResponse.json({ error: "Upload not found" }, { status: 404 });
     }
 
-    if (upload.userId !== user.id) {
+    if (uploads[0].userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const extractions = await prisma.extractedSubscription.findMany({
-      where: {
-        id: { in: acceptedIds.map(Number) },
-        uploadId: id,
-      },
-    });
+    const numericIds = acceptedIds.map(Number);
+    const placeholders = numericIds.map(() => "?").join(",");
+
+    const extractions = await query<(ExtractedSubscriptionRow & RowDataPacket)[]>(
+      `SELECT * FROM ExtractedSubscription WHERE id IN (${placeholders}) AND uploadId = ?`,
+      [...numericIds, id]
+    );
 
     if (extractions.length === 0) {
       return NextResponse.json(
@@ -47,27 +53,40 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.extractedSubscription.updateMany({
-        where: { id: { in: extractions.map((e) => e.id) } },
-        data: { reviewStatus: "ACCEPTED" },
-      });
+    const conn = await getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const extractionIds = extractions.map((e) => e.id);
+      const updatePlaceholders = extractionIds.map(() => "?").join(",");
+      await conn.execute(
+        `UPDATE ExtractedSubscription SET reviewStatus = 'ACCEPTED' WHERE id IN (${updatePlaceholders})`,
+        extractionIds
+      );
 
       for (const ext of extractions) {
-        await tx.subscription.create({
-          data: {
-            userId: user.id,
-            name: ext.name,
-            price: ext.price,
-            currency: ext.currency,
-            billingCycle: ext.billingCycle,
-            providerUrl: ext.providerUrl,
-            nextBillingDate: ext.nextBillingDate,
-            status: "ACTIVE",
-          },
-        });
+        await conn.execute(
+          `INSERT INTO Subscription (userId, name, price, currency, billingCycle, providerUrl, nextBillingDate, status, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', NOW(), NOW())`,
+          [
+            user.id,
+            ext.name,
+            ext.price,
+            ext.currency,
+            ext.billingCycle,
+            ext.providerUrl,
+            ext.nextBillingDate,
+          ]
+        );
       }
-    });
+
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    } finally {
+      conn.release();
+    }
 
     return NextResponse.json({ created: extractions.length });
   } catch (err) {

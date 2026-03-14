@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { query, execute } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { subscriptionCreateSchema } from "@/lib/validations/subscription";
-import { Prisma } from "@/lib/generated/prisma";
 import { z } from "zod";
+import type { Subscription } from "@/lib/types/database";
+import type { RowDataPacket } from "mysql2/promise";
 
 const querySchema = z.object({
   search: z.string().max(200).optional(),
@@ -30,22 +31,26 @@ export async function GET(request: Request) {
     }
 
     const { search, status, billingCycle } = parsed.data;
-    const where: Prisma.SubscriptionWhereInput = { userId: user.id };
+    const conditions: string[] = ["userId = ?"];
+    const params: (string | number | null)[] = [user.id];
 
     if (search) {
-      where.name = { contains: search };
+      conditions.push("name LIKE ?");
+      params.push(`%${search}%`);
     }
     if (status) {
-      where.status = status;
+      conditions.push("status = ?");
+      params.push(status);
     }
     if (billingCycle) {
-      where.billingCycle = billingCycle;
+      conditions.push("billingCycle = ?");
+      params.push(billingCycle);
     }
 
-    const subscriptions = await prisma.subscription.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-    });
+    const subscriptions = await query<(Subscription & RowDataPacket)[]>(
+      `SELECT * FROM Subscription WHERE ${conditions.join(" AND ")} ORDER BY createdAt DESC`,
+      params
+    );
 
     return NextResponse.json({ subscriptions });
   } catch (err) {
@@ -60,14 +65,29 @@ export async function POST(request: Request) {
     const body = await request.json();
     const data = subscriptionCreateSchema.parse(body);
 
-    const subscription = await prisma.subscription.create({
-      data: {
-        ...data,
-        userId: user.id,
-      },
-    });
+    const result = await execute(
+      `INSERT INTO Subscription (userId, name, price, currency, billingCycle, status, category, providerUrl, nextBillingDate, notes, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        user.id,
+        data.name,
+        data.price,
+        data.currency,
+        data.billingCycle,
+        data.status,
+        data.category ?? null,
+        data.providerUrl || null,
+        data.nextBillingDate ?? null,
+        data.notes ?? null,
+      ]
+    );
 
-    return NextResponse.json(subscription, { status: 201 });
+    const rows = await query<(Subscription & RowDataPacket)[]>(
+      "SELECT * FROM Subscription WHERE id = ?",
+      [result.insertId]
+    );
+
+    return NextResponse.json(rows[0], { status: 201 });
   } catch (err) {
     if (err instanceof NextResponse) return err;
     if (err instanceof z.ZodError) {

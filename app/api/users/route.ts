@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { query, execute } from "@/lib/db";
 import { getVerifiedCognitoId } from "@/lib/auth";
 import { z } from "zod";
+import type { User } from "@/lib/types/database";
+import type { RowDataPacket } from "mysql2/promise";
 
 const syncUserSchema = z.object({
   cognitoId: z.string().min(1),
   email: z.string().email(),
-  firstName: z.string().max(100).optional().default(""),
-  lastName: z.string().max(100).optional().default(""),
+  emailVerified: z.boolean().optional().default(true),
+  firstName: z.string().max(100).nullable().optional().default(null),
+  lastName: z.string().max(100).nullable().optional().default(null),
 });
 
 export async function POST(request: Request) {
@@ -32,20 +35,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden: cognitoId mismatch" }, { status: 403 });
     }
 
-    const user = await prisma.user.upsert({
-      where: { cognitoId: verifiedCognitoId },
-      update: {
-        email: parsed.data.email,
-        firstName: parsed.data.firstName,
-        lastName: parsed.data.lastName,
-      },
-      create: {
-        cognitoId: verifiedCognitoId,
-        email: parsed.data.email,
-        firstName: parsed.data.firstName,
-        lastName: parsed.data.lastName,
-      },
-    });
+    await execute(
+      `INSERT INTO User (cognitoId, email, firstName, lastName, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, NOW(), NOW())
+       ON DUPLICATE KEY UPDATE
+       email = IF(?, VALUES(email), email),
+       firstName = VALUES(firstName),
+       lastName = VALUES(lastName),
+       updatedAt = NOW()`,
+      [
+        verifiedCognitoId,
+        parsed.data.email,
+        parsed.data.firstName,
+        parsed.data.lastName,
+        parsed.data.emailVerified,
+      ]
+    );
+
+    const rows = await query<(User & RowDataPacket)[]>(
+      "SELECT * FROM User WHERE cognitoId = ? LIMIT 1",
+      [verifiedCognitoId]
+    );
+
+    const user = rows[0];
 
     return NextResponse.json({ id: user.id, email: user.email });
   } catch (err) {

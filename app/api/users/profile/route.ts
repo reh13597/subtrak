@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { execute } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { z } from "zod";
 
 const updateProfileSchema = z.object({
-  firstName: z.string().max(100).optional(),
-  lastName: z.string().max(100).optional(),
+  firstName: z.string().max(100).nullable().optional(),
+  lastName: z.string().max(100).nullable().optional(),
   email: z.string().email().optional(),
 });
 
@@ -31,17 +31,35 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const data = updateProfileSchema.parse(body);
 
-    const updated = await prisma.user.update({
-      where: { id: user.id },
-      data,
-    });
+    const setClauses: string[] = ["updatedAt = NOW()"];
+    const params: (string | number | null)[] = [];
+
+    if (data.firstName !== undefined) {
+      setClauses.push("firstName = ?");
+      params.push(data.firstName);
+    }
+    if (data.lastName !== undefined) {
+      setClauses.push("lastName = ?");
+      params.push(data.lastName);
+    }
+    if (data.email !== undefined) {
+      setClauses.push("email = ?");
+      params.push(data.email);
+    }
+
+    params.push(user.id);
+
+    await execute(
+      `UPDATE User SET ${setClauses.join(", ")} WHERE id = ?`,
+      params
+    );
 
     return NextResponse.json({
-      id: updated.id,
-      email: updated.email,
-      firstName: updated.firstName,
-      lastName: updated.lastName,
-      createdAt: updated.createdAt,
+      id: user.id,
+      email: data.email ?? user.email,
+      firstName: data.firstName ?? user.firstName,
+      lastName: data.lastName ?? user.lastName,
+      createdAt: user.createdAt,
     });
   } catch (err) {
     if (err instanceof NextResponse) return err;

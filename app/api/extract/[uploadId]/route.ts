@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { query, execute, getConnection } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { extractSubscriptionsFromFile, calculateNextBillingDate } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
+import type { StatementUpload, ExtractedSubscriptionRow } from "@/lib/types/database";
+import type { RowDataPacket } from "mysql2/promise";
 
 type RouteParams = { params: Promise<{ uploadId: string }> };
 
 const EXTRACT_MAX_PER_WINDOW = 5;
-const EXTRACT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const EXTRACT_WINDOW_MS = 60 * 60 * 1000;
 
 export async function GET(request: Request, { params }: RouteParams) {
   try {
@@ -19,20 +21,23 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid upload ID" }, { status: 400 });
     }
 
-    const upload = await prisma.statementUpload.findUnique({ where: { id } });
+    const uploads = await query<(StatementUpload & RowDataPacket)[]>(
+      "SELECT id, userId, fileName, mimeType, status, createdAt FROM StatementUpload WHERE id = ? LIMIT 1",
+      [id]
+    );
 
-    if (!upload) {
+    if (uploads.length === 0) {
       return NextResponse.json({ error: "Upload not found" }, { status: 404 });
     }
 
-    if (upload.userId !== user.id) {
+    if (uploads[0].userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const extractions = await prisma.extractedSubscription.findMany({
-      where: { uploadId: id },
-      orderBy: { confidenceScore: "desc" },
-    });
+    const extractions = await query<(ExtractedSubscriptionRow & RowDataPacket)[]>(
+      "SELECT * FROM ExtractedSubscription WHERE uploadId = ? ORDER BY confidenceScore DESC",
+      [id]
+    );
 
     const items = extractions.map((e) => ({
       id: e.id,
@@ -41,8 +46,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       currency: e.currency,
       billingCycle: e.billingCycle,
       providerUrl: e.providerUrl,
-      lastChargeDate: e.lastChargeDate?.toISOString() ?? null,
-      nextBillingDate: e.nextBillingDate?.toISOString() ?? null,
+      lastChargeDate: e.lastChargeDate ? new Date(e.lastChargeDate).toISOString() : null,
+      nextBillingDate: e.nextBillingDate ? new Date(e.nextBillingDate).toISOString() : null,
       confidenceScore: e.confidenceScore,
       reviewStatus: e.reviewStatus,
     }));
@@ -79,11 +84,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid upload ID" }, { status: 400 });
     }
 
-    const upload = await prisma.statementUpload.findUnique({ where: { id } });
+    const uploads = await query<(StatementUpload & RowDataPacket)[]>(
+      "SELECT * FROM StatementUpload WHERE id = ? LIMIT 1",
+      [id]
+    );
 
-    if (!upload) {
+    if (uploads.length === 0) {
       return NextResponse.json({ error: "Upload not found" }, { status: 404 });
     }
+
+    const upload = uploads[0];
 
     if (upload.userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -93,10 +103,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Upload has no file data" }, { status: 400 });
     }
 
-    await prisma.statementUpload.update({
-      where: { id },
-      data: { status: "PROCESSING" },
-    });
+    await execute(
+      "UPDATE StatementUpload SET status = 'PROCESSING' WHERE id = ?",
+      [id]
+    );
 
     const result = await extractSubscriptionsFromFile(
       Buffer.from(upload.fileData),
@@ -105,57 +115,85 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
 
     if (!result.success) {
-      await prisma.statementUpload.update({
-        where: { id },
-        data: { status: "FAILED" },
-      });
+      await execute(
+        "UPDATE StatementUpload SET status = 'FAILED' WHERE id = ?",
+        [id]
+      );
       return NextResponse.json({ error: result.error }, { status: 422 });
     }
 
-    const extractions = await prisma.$transaction(
-      result.data.map((item) => {
+    const conn = await getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const insertedIds: number[] = [];
+
+      for (const item of result.data) {
         const lastChargeDate = item.lastChargeDate ? new Date(item.lastChargeDate) : null;
         const nextBillingDate = item.lastChargeDate
           ? calculateNextBillingDate(item.lastChargeDate, item.billingCycle)
           : null;
 
-        return prisma.extractedSubscription.create({
-          data: {
-            uploadId: id,
-            name: item.name,
-            price: item.price,
-            currency: item.currency,
-            billingCycle: item.billingCycle,
-            providerUrl: item.providerUrl ?? null,
+        const [insertResult] = await conn.execute<import("mysql2/promise").ResultSetHeader>(
+          `INSERT INTO ExtractedSubscription (uploadId, name, price, currency, billingCycle, providerUrl, lastChargeDate, nextBillingDate, confidenceScore, reviewStatus, rawJson, createdAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, NOW())`,
+          [
+            id,
+            item.name,
+            item.price,
+            item.currency,
+            item.billingCycle,
+            item.providerUrl ?? null,
             lastChargeDate,
             nextBillingDate,
-            confidenceScore: item.confidenceScore,
-            reviewStatus: "PENDING",
-            rawJson: JSON.parse(JSON.stringify(item)),
-          },
-        });
-      })
-    );
+            item.confidenceScore,
+            JSON.stringify(item),
+          ]
+        );
+        insertedIds.push(insertResult.insertId);
+      }
 
-    await prisma.statementUpload.update({
-      where: { id },
-      data: { status: "DONE" },
-    });
+      await conn.execute(
+        "UPDATE StatementUpload SET status = 'DONE' WHERE id = ?",
+        [id]
+      );
 
-    const items = extractions.map((e) => ({
-      id: e.id,
-      name: e.name,
-      price: Number(e.price),
-      currency: e.currency,
-      billingCycle: e.billingCycle,
-      providerUrl: e.providerUrl,
-      lastChargeDate: e.lastChargeDate?.toISOString() ?? null,
-      nextBillingDate: e.nextBillingDate?.toISOString() ?? null,
-      confidenceScore: e.confidenceScore,
-      reviewStatus: e.reviewStatus,
-    }));
+      await conn.commit();
 
-    return NextResponse.json({ items });
+      if (insertedIds.length === 0) {
+        return NextResponse.json({ items: [] });
+      }
+
+      const placeholders = insertedIds.map(() => "?").join(",");
+      const [extractions] = await conn.query<(ExtractedSubscriptionRow & RowDataPacket)[]>(
+        `SELECT * FROM ExtractedSubscription WHERE id IN (${placeholders}) ORDER BY confidenceScore DESC`,
+        insertedIds
+      );
+
+      const items = extractions.map((e) => ({
+        id: e.id,
+        name: e.name,
+        price: Number(e.price),
+        currency: e.currency,
+        billingCycle: e.billingCycle,
+        providerUrl: e.providerUrl,
+        lastChargeDate: e.lastChargeDate ? new Date(e.lastChargeDate).toISOString() : null,
+        nextBillingDate: e.nextBillingDate ? new Date(e.nextBillingDate).toISOString() : null,
+        confidenceScore: e.confidenceScore,
+        reviewStatus: e.reviewStatus,
+      }));
+
+      return NextResponse.json({ items });
+    } catch (txErr) {
+      await conn.rollback();
+      await execute(
+        "UPDATE StatementUpload SET status = 'FAILED' WHERE id = ?",
+        [id]
+      );
+      throw txErr;
+    } finally {
+      conn.release();
+    }
   } catch (err) {
     if (err instanceof NextResponse) return err;
     return NextResponse.json({ error: "Extraction failed" }, { status: 500 });

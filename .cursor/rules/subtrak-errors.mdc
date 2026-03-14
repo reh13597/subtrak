@@ -142,3 +142,15 @@ This file is a living document. Every time a runtime, build, or type error is en
 
 ---
 <!-- NEW ERRORS: Append below this line -->
+
+## Error: Profile edits overwritten on refresh after MySQL migration
+- Symptom: Updating profile data in the account page appeared to work immediately, but a full page refresh restored older values from Cognito
+- Root cause: The account page saved names directly to MySQL while `syncCurrentUserToDb()` treated Cognito as the source on refresh. This created two competing sources of truth.
+- Fix: Changed the account page to update Cognito attributes first, then call `syncCurrentUserToDb()`. Restored `/api/users` upsert to mirror `email`, `firstName`, and `lastName` from Cognito into MySQL.
+- Prevention: Keep Cognito as the single source of truth for editable profile identity fields. Do not write those fields directly to MySQL from the client. Always update Cognito first, then sync the DB copy.
+
+## Error: Email verification UI missing after Cognito email change
+- Symptom: Changing email triggered Cognito verification, but the account page had no field to enter the confirmation code, leaving users stuck in a pending state
+- Root cause: The save flow handled `CONFIRM_ATTRIBUTE_WITH_CODE` with a toast only and did not render a follow-up confirmation form. It also risked syncing an unverified email into MySQL.
+- Fix: Replaced Cognito email-update flow with a custom "verify via current email first" flow: request-email-change sends a code to the user's current email via EmailJS, confirm-email-change verifies the code then updates Cognito via Admin API and MySQL. Matches signup UX.
+- Prevention: Email changes must verify via the current/registered email before switching. Use custom backend flow (PendingEmailChange table, EmailJS, AdminUpdateUserAttributes) instead of Cognito's built-in updateUserAttributes for email.

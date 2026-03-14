@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
-import { prisma } from "@/lib/prisma";
+import { query } from "@/lib/db";
+import type { User } from "@/lib/types/database";
+import type { RowDataPacket } from "mysql2/promise";
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID!,
@@ -16,7 +18,7 @@ function extractToken(request: Request): string | null {
   return request.headers.get("x-id-token");
 }
 
-export async function getAuthUser(request: Request) {
+export async function getAuthUser(request: Request): Promise<User | null> {
   const token = extractToken(request);
 
   if (!token) {
@@ -29,17 +31,18 @@ export async function getAuthUser(request: Request) {
 
     if (!cognitoId) return null;
 
-    const user = await prisma.user.findUnique({
-      where: { cognitoId },
-    });
+    const rows = await query<(User & RowDataPacket)[]>(
+      "SELECT * FROM User WHERE cognitoId = ? LIMIT 1",
+      [cognitoId]
+    );
 
-    return user;
+    return rows[0] ?? null;
   } catch {
     return null;
   }
 }
 
-export async function requireAuth(request: Request) {
+export async function requireAuth(request: Request): Promise<User> {
   const user = await getAuthUser(request);
 
   if (!user) {

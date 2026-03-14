@@ -7,14 +7,16 @@ export async function syncCurrentUserToDb(): Promise<string | null> {
     const cognitoId = currentUser.userId;
 
     let email = "";
-    let firstName = "";
-    let lastName = "";
+    let emailVerified = true;
+    let firstName: string | null = null;
+    let lastName: string | null = null;
 
     try {
       const attrs = await fetchUserAttributes();
       email = attrs.email ?? "";
-      firstName = attrs.given_name ?? "";
-      lastName = attrs.family_name ?? "";
+      emailVerified = attrs.email_verified !== "false";
+      firstName = attrs.given_name?.trim() || null;
+      lastName = attrs.family_name?.trim() || null;
     } catch {
       // attributes may not be available in all contexts
     }
@@ -23,7 +25,7 @@ export async function syncCurrentUserToDb(): Promise<string | null> {
     const res = await fetch("/api/users", {
       method: "POST",
       headers,
-      body: JSON.stringify({ cognitoId, email, firstName, lastName }),
+      body: JSON.stringify({ cognitoId, email, emailVerified, firstName, lastName }),
     });
 
     if (!res.ok) {

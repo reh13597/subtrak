@@ -1,0 +1,20 @@
+---
+description: MySQL data access and profile sync safeguards
+alwaysApply: true
+---
+
+# SubTrak MySQL Rules
+
+- Prisma has been removed. Do not recreate `schema.prisma`, `lib/prisma.ts`, generated Prisma clients, or Prisma-style queries.
+- Use `@/lib/db` for all database access:
+  - `query<T>()` for reads
+  - `execute()` for writes
+  - `getConnection()` for transactions
+- All SQL must be parameterized. Never concatenate user input into SQL strings.
+- Reuse shared DB types from `@/lib/types/database` and combine row reads with `RowDataPacket` for typed results.
+- For multi-step writes, use manual transactions with `beginTransaction()`, `commit()`, `rollback()`, and always `release()` in `finally`.
+- Keep auth/data scoping strict: every user-owned query must filter by the authenticated user's ID or verified Cognito identity.
+- Cognito is the source of truth for profile identity fields: `email`, `firstName`, and `lastName`. Account profile edits must update Cognito first, then call `syncCurrentUserToDb()` to mirror those values into MySQL.
+- Email changes use a custom "verify via current email first" flow: send code to current email (EmailJS), store pending change in PendingEmailChange, then on verification update Cognito via Admin API and MySQL. Do not use Cognito updateUserAttributes for email.
+- Editable profile fields may be `null`. API validation for profile updates must accept nullable names so clearing fields persists correctly.
+- When changing schema-related behavior, update `sql/schema.sql`, related DB types, affected API queries, and any validation schemas together.

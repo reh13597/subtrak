@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { execute } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { uploadSchema } from "@/lib/validations/upload";
 
@@ -30,17 +30,13 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const fileData = Buffer.from(arrayBuffer);
 
-    const upload = await prisma.statementUpload.create({
-      data: {
-        userId: user.id,
-        fileName: file.name,
-        fileData,
-        mimeType: file.type,
-        status: "PENDING",
-      },
-    });
+    const result = await execute(
+      `INSERT INTO StatementUpload (userId, fileName, fileData, mimeType, status, createdAt)
+       VALUES (?, ?, ?, ?, 'PENDING', NOW())`,
+      [user.id, file.name, fileData, file.type]
+    );
 
-    return NextResponse.json({ uploadId: upload.id }, { status: 201 });
+    return NextResponse.json({ uploadId: result.insertId }, { status: 201 });
   } catch (err) {
     if (err instanceof NextResponse) return err;
     const message = err instanceof Error ? err.message : "Failed to upload statement";

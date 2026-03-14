@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signOut } from "aws-amplify/auth";
+import { deleteUserAttributes, signOut, updateUserAttributes } from "aws-amplify/auth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import {
   User,
@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { syncCurrentUserToDb } from "@/lib/sync-user";
 import { authHeaders } from "@/lib/client-auth";
 
 type SidebarTab = "profile" | "notifications" | "billing" | "security";
@@ -38,7 +39,11 @@ export default function AccountPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editFirstName, setEditFirstName] = useState("");
   const [editLastName, setEditLastName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [saving, setSaving] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [pendingNewEmail, setPendingNewEmail] = useState<string | null>(null);
+  const [verifyingEmail, setVerifyingEmail] = useState(false);
 
   const [prefs, setPrefs] = useState<Preferences>(() => {
     if (typeof window !== "undefined") {
@@ -54,6 +59,7 @@ export default function AccountPage() {
     if (profile) {
       setEditFirstName(profile.firstName ?? "");
       setEditLastName(profile.lastName ?? "");
+      setEditEmail(profile.email ?? "");
     }
   }, [profile]);
 
@@ -75,6 +81,9 @@ export default function AccountPage() {
   function startEditing() {
     setEditFirstName(profile?.firstName ?? "");
     setEditLastName(profile?.lastName ?? "");
+    setEditEmail(profile?.email ?? "");
+    setPendingNewEmail(null);
+    setVerificationCode("");
     setIsEditing(true);
   }
 
@@ -82,30 +91,85 @@ export default function AccountPage() {
     setIsEditing(false);
     setEditFirstName(profile?.firstName ?? "");
     setEditLastName(profile?.lastName ?? "");
+    setEditEmail(profile?.email ?? "");
+    setPendingNewEmail(null);
+    setVerificationCode("");
   }
 
   async function saveProfile() {
     if (!cognitoId) return;
     setSaving(true);
     try {
-      const headers = await authHeaders();
-      const res = await fetch("/api/users/profile", {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({
-          firstName: editFirstName.trim() || null,
-          lastName: editLastName.trim() || null,
-        }),
-      });
+      const trimmedEmail = editEmail.trim().toLowerCase();
+      const trimmedFirstName = editFirstName.trim();
+      const trimmedLastName = editLastName.trim();
+      const emailChanged = trimmedEmail !== (profile?.email ?? "").trim().toLowerCase();
+      const namesChanged = trimmedFirstName !== (profile?.firstName ?? "").trim() || trimmedLastName !== (profile?.lastName ?? "").trim();
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? "Failed to update profile");
+      if (!trimmedEmail) {
+        throw new Error("Email is required");
       }
 
-      setIsEditing(false);
-      await refreshProfile();
-      toast({ title: "Profile updated", description: "Your information has been saved everywhere." });
+      if (emailChanged) {
+        const headers = await authHeaders();
+        const res = await fetch("/api/users/request-email-change", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ newEmail: trimmedEmail }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.error ?? "Failed to send verification code");
+        }
+
+        setPendingNewEmail(trimmedEmail);
+        setVerificationCode("");
+        toast({
+          title: "Verification code sent",
+          description: `Check your current email (${profile?.email}) for the code. Enter it below to complete the email change.`,
+        });
+      }
+
+      if (namesChanged) {
+        const userAttributes: Record<string, string> = {};
+        const userAttributeKeys: ("given_name" | "family_name")[] = [];
+
+        if (trimmedFirstName) {
+          userAttributes.given_name = trimmedFirstName;
+        } else {
+          userAttributeKeys.push("given_name");
+        }
+
+        if (trimmedLastName) {
+          userAttributes.family_name = trimmedLastName;
+        } else {
+          userAttributeKeys.push("family_name");
+        }
+
+        if (Object.keys(userAttributes).length > 0) {
+          await updateUserAttributes({ userAttributes });
+        }
+
+        if (userAttributeKeys.length === 1) {
+          await deleteUserAttributes({ userAttributeKeys: [userAttributeKeys[0]] });
+        } else if (userAttributeKeys.length === 2) {
+          await deleteUserAttributes({ userAttributeKeys: [userAttributeKeys[0], userAttributeKeys[1]] });
+        }
+
+        await syncCurrentUserToDb();
+        await refreshProfile();
+      }
+
+      if (!emailChanged) {
+        setIsEditing(false);
+        toast({ title: "Profile updated", description: "Your name changes have been saved." });
+      } else if (!namesChanged) {
+        // Email change requested, names unchanged - keep editing open for code entry
+      } else {
+        toast({ title: "Names saved", description: "Check your current email for the verification code to complete the email change." });
+      }
     } catch (err) {
       toast({
         title: "Error",
@@ -115,6 +179,68 @@ export default function AccountPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function confirmEmailChange() {
+    const trimmedCode = verificationCode.trim();
+
+    if (!trimmedCode) {
+      toast({
+        title: "Verification code required",
+        description: "Enter the 6-digit code sent to your current email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!pendingNewEmail) {
+      toast({
+        title: "Error",
+        description: "No pending email change. Please request a new code.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setVerifyingEmail(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch("/api/users/confirm-email-change", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ newEmail: pendingNewEmail, code: trimmedCode }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to verify email change");
+      }
+
+      await refreshProfile();
+      setPendingNewEmail(null);
+      setVerificationCode("");
+      setEditEmail(pendingNewEmail);
+      setIsEditing(false);
+
+      toast({
+        title: "Email updated",
+        description: "Your new email is now active in Cognito and synced to MySQL.",
+      });
+    } catch (err) {
+      toast({
+        title: "Verification failed",
+        description: err instanceof Error ? err.message : "Unable to verify your email change.",
+        variant: "destructive",
+      });
+    } finally {
+      setVerifyingEmail(false);
+    }
+  }
+
+  function cancelEmailVerification() {
+    setPendingNewEmail(null);
+    setVerificationCode("");
   }
 
   function togglePref(key: keyof Preferences) {
@@ -189,7 +315,7 @@ export default function AccountPage() {
                   <User size={20} className="text-[#155885]" />
                   <span>Personal Information</span>
                 </h3>
-                {!isEditing ? (
+                {!isEditing && !pendingNewEmail ? (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -200,38 +326,41 @@ export default function AccountPage() {
                     Edit
                   </Button>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={cancelEditing}
-                      className="text-white/40 hover:text-white hover:bg-white/5 rounded-xl gap-1.5 font-bold"
-                    >
-                      <X size={14} />
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={saveProfile}
-                      disabled={saving}
-                      className="bg-[#155885] hover:bg-[#1a6ba1] text-white rounded-xl gap-1.5 font-bold"
-                    >
-                      {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                      Save
-                    </Button>
-                  </div>
+                  !pendingNewEmail && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={cancelEditing}
+                        className="text-white/40 hover:text-white hover:bg-white/5 rounded-xl gap-1.5 font-bold"
+                      >
+                        <X size={14} />
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={saveProfile}
+                        disabled={saving}
+                        className="bg-[#155885] hover:bg-[#1a6ba1] text-white rounded-xl gap-1.5 font-bold"
+                      >
+                        {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                        Save
+                      </Button>
+                    </div>
+                  )
                 )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-2">
                   <p className="text-[10px] uppercase font-bold tracking-widest text-white/20">First Name</p>
-                  {isEditing ? (
+                  {isEditing || pendingNewEmail ? (
                     <Input
                       value={editFirstName}
                       onChange={(e) => setEditFirstName(e.target.value)}
                       placeholder="Enter first name"
                       className="bg-white/5 border-white/10 text-white placeholder:text-white/20 rounded-xl h-11"
+                      disabled={!!pendingNewEmail}
                     />
                   ) : (
                     <p className="text-white font-medium">{profile?.firstName || "Not set"}</p>
@@ -239,12 +368,13 @@ export default function AccountPage() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-[10px] uppercase font-bold tracking-widest text-white/20">Last Name</p>
-                  {isEditing ? (
+                  {isEditing || pendingNewEmail ? (
                     <Input
                       value={editLastName}
                       onChange={(e) => setEditLastName(e.target.value)}
                       placeholder="Enter last name"
                       className="bg-white/5 border-white/10 text-white placeholder:text-white/20 rounded-xl h-11"
+                      disabled={!!pendingNewEmail}
                     />
                   ) : (
                     <p className="text-white font-medium">{profile?.lastName || "Not set"}</p>
@@ -252,10 +382,24 @@ export default function AccountPage() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-[10px] uppercase font-bold tracking-widest text-white/20">Email Address</p>
-                  <div className="flex items-center gap-2">
-                    <Mail size={14} className="text-white/20" />
-                    <p className="text-white font-medium">{profile?.email || "—"}</p>
-                  </div>
+                  {isEditing || pendingNewEmail ? (
+                    <div className="flex items-center gap-2">
+                      <Mail size={14} className="text-white/20" />
+                      <Input
+                        type="email"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        placeholder="Enter email address"
+                        className="bg-white/5 border-white/10 text-white placeholder:text-white/20 rounded-xl h-11"
+                        disabled={!!pendingNewEmail}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Mail size={14} className="text-white/20" />
+                      <p className="text-white font-medium">{profile?.email || "—"}</p>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <p className="text-[10px] uppercase font-bold tracking-widest text-white/20">Member Since</p>
@@ -265,6 +409,43 @@ export default function AccountPage() {
                   </div>
                 </div>
               </div>
+
+              {pendingNewEmail && (
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-5 space-y-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-amber-200">Verify your email change</p>
+                    <p className="text-sm text-amber-100/80">
+                      We sent a 6-digit code to your current email <span className="font-semibold">{profile?.email}</span>.
+                      Enter it below to switch to <span className="font-semibold">{pendingNewEmail}</span>. Your current email stays active until verified.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                    <Input
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value)}
+                      placeholder="Enter 6-digit code"
+                      maxLength={6}
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/20 rounded-xl h-11 text-center tracking-widest font-mono text-lg"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={confirmEmailChange}
+                        disabled={verifyingEmail}
+                        className="bg-[#155885] hover:bg-[#1a6ba1] text-white rounded-xl font-bold"
+                      >
+                        {verifyingEmail ? <Loader2 size={14} className="animate-spin" /> : "Confirm email"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={cancelEmailVerification}
+                        className="text-white/60 hover:text-white hover:bg-white/5 rounded-xl font-bold"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -45,5 +45,3 @@ next-env.d.ts
 
 #env
 env.download
-
-/lib/generated/prisma
