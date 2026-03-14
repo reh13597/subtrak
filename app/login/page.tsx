@@ -171,11 +171,11 @@ function AuthForm() {
 
         <CardHeader className="relative text-center pb-2">
           <CardTitle className="text-3xl font-bold text-white tracking-tight">
-            {activeTab === "confirm" ? "Check Your Email" : "Welcome Back."}
+            {activeTab === "confirm" ? "Check Your Email." : "Welcome Back."}
           </CardTitle>
           <CardDescription className="text-white/60 text-base mt-1">
             {activeTab === "confirm"
-              ? `We sent a code to ${pendingEmail || "your email"}`
+              ? `We sent a verification code to ${pendingEmail || "your email."}`
               : "One step away from greatness."}
           </CardDescription>
         </CardHeader>
@@ -201,7 +201,7 @@ function AuthForm() {
                 value="signin"
                 className="flex-1 data-[state=active]:bg-[#155885] data-[state=active]:text-white text-white/60"
               >
-                Sign In
+                Log In
               </TabsTrigger>
               <TabsTrigger
                 value="signup"
@@ -401,7 +401,7 @@ function AuthForm() {
                       onClick={() => switchTab("signin")}
                       className="text-white font-bold hover:text-[#155885] transition"
                     >
-                      Sign in
+                      Login
                     </button>
                   </p>
                 </form>
