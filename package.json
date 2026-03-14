@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:schema": "node scripts/run-schema.mjs"
+    "db:schema": "node scripts/run-schema.mjs",
+    "db:dump": "node scripts/dump-database.mjs",
+    "db:seed": "node scripts/run-dump.mjs"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.1",
