@@ -1,29 +1,30 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function PageTransition({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const [isVisible, setIsVisible] = useState(true);
-  const [displayChildren, setDisplayChildren] = useState(children);
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    setIsVisible(false);
+    // This effect runs only once on initial mount of the component
+    // (i.e., on initial page load or hard refresh).
+    // After a very short delay to ensure the DOM is ready for a transition,
+    // we trigger the fade-in.
     const timeout = setTimeout(() => {
-      setDisplayChildren(children);
       setIsVisible(true);
-    }, 150);
+    }, 50); 
+
     return () => clearTimeout(timeout);
-  }, [pathname, children]);
+  }, []); // Empty dependency array ensures this runs only once
 
   return (
     <div
-      className={`transition-all duration-500 ease-in-out ${
-        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+      // Remove key={pathname} to prevent component re-mounting and re-animating on route changes.
+      className={`transition-all duration-800 cubic-bezier(0.4, 0, 0.2, 1) ${
+        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"
       }`}
     >
-      {displayChildren}
+      {children}
     </div>
   );
 }
