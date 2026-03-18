@@ -9,22 +9,32 @@ export async function getIdToken(): Promise<string | null> {
     return cachedToken;
   }
 
-  try {
-    const session = await fetchAuthSession();
-    const idToken = session.tokens?.idToken?.toString() ?? null;
+  let lastError: any = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const session = await fetchAuthSession();
+      const idToken = session.tokens?.idToken?.toString() ?? null;
 
-    if (idToken) {
-      cachedToken = idToken;
-      const payload = JSON.parse(atob(idToken.split(".")[1]));
-      tokenExpiry = (payload.exp ?? 0) * 1000;
+      if (idToken) {
+        cachedToken = idToken;
+        const payload = JSON.parse(atob(idToken.split(".")[1]));
+        tokenExpiry = (payload.exp ?? 0) * 1000;
+        return idToken;
+      }
+      
+      console.warn(`[getIdToken] Attempt ${i + 1}: No ID token in session. Tokens keys:`, Object.keys(session.tokens ?? {}));
+    } catch (err) {
+      lastError = err;
+      console.warn(`[getIdToken] Attempt ${i + 1} failed:`, err);
     }
-
-    return idToken;
-  } catch {
-    cachedToken = null;
-    tokenExpiry = 0;
-    return null;
+    // Wait a bit before retrying
+    await new Promise((resolve) => setTimeout(resolve, 500 * (i + 1)));
   }
+
+  console.error("[getIdToken] Exhausted retries. Last error:", lastError);
+  cachedToken = null;
+  tokenExpiry = 0;
+  return null;
 }
 
 export function clearTokenCache() {

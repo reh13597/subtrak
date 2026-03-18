@@ -177,7 +177,7 @@ export function StatementUploader({
               <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/30">
                 <Upload size={28} />
               </div>
-              <p className="text-white font-bold">Drop your bank statement here</p>
+              <p className="text-white font-bold">Upload or drop your bank statement here</p>
               <p className="text-white/40 text-sm">
                 PDF or CSV &middot; Max 10 MB
               </p>

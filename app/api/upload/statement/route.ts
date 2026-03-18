@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { execute } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { uploadSchema } from "@/lib/validations/upload";
+import { uploadToS3 } from "@/lib/s3";
 
 export async function POST(request: Request) {
   try {
@@ -30,10 +31,12 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const fileData = Buffer.from(arrayBuffer);
 
+    const s3Key = await uploadToS3(fileData, file.name, file.type);
+
     const result = await execute(
-      `INSERT INTO StatementUpload (userId, fileName, fileData, mimeType, status, createdAt)
+      `INSERT INTO StatementUpload (userId, fileName, s3Key, mimeType, status, createdAt)
        VALUES (?, ?, ?, ?, 'PENDING', NOW())`,
-      [user.id, file.name, fileData, file.type]
+      [user.id, file.name, s3Key, file.type]
     );
 
     return NextResponse.json({ uploadId: result.insertId }, { status: 201 });

@@ -19,8 +19,8 @@ export default function PageTransition({ children }: { children: React.ReactNode
 
   return (
     <div
-      className={`transition-all duration-300 ease-out ${
-        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+      className={`transition-all duration-500 ease-in-out ${
+        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
       }`}
     >
       {displayChildren}

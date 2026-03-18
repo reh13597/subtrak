@@ -7,7 +7,7 @@ import type { RowDataPacket } from "mysql2/promise";
 
 const confirmSchema = z.object({
   newEmail: z.string().email("Invalid email address"),
-  code: z.string().min(6, "Code must be 6 digits").max(6),
+  code: z.string().min(6, "Code must be at least 6 characters"),
 });
 
 export async function POST(request: Request) {
@@ -25,6 +25,21 @@ export async function POST(request: Request) {
 
     const { newEmail, code } = parsed.data;
     const normalizedNewEmail = newEmail.trim().toLowerCase();
+
+    // If verified by Amplify, we skip the Cognito admin update as it's already done
+    if (code === "VERIFIED_BY_AMPLIFY") {
+      await execute(
+        "UPDATE User SET email = ?, updatedAt = NOW() WHERE cognitoId = ?",
+        [normalizedNewEmail, user.cognitoId]
+      );
+      
+      await execute("DELETE FROM PendingEmailChange WHERE userId = ?", [user.id]);
+
+      return NextResponse.json({
+        message: "Email synced successfully",
+        email: normalizedNewEmail,
+      });
+    }
 
     const rows = await query<RowDataPacket[]>(
       "SELECT id, newEmail, code, expiresAt FROM PendingEmailChange WHERE userId = ? ORDER BY createdAt DESC LIMIT 1",

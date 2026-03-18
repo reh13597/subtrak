@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { deleteUserAttributes, signOut, updateUserAttributes } from "aws-amplify/auth";
+import { 
+  deleteUserAttributes, 
+  signOut, 
+  updateUserAttributes, 
+  confirmUserAttribute, 
+  sendUserAttributeVerificationCode 
+} from "aws-amplify/auth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import {
   User,
@@ -15,6 +21,7 @@ import {
   X,
   Check,
   Calendar,
+  RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -44,6 +51,8 @@ export default function AccountPage() {
   const [verificationCode, setVerificationCode] = useState("");
   const [pendingNewEmail, setPendingNewEmail] = useState<string | null>(null);
   const [verifyingEmail, setVerifyingEmail] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [prefs, setPrefs] = useState<Preferences>(() => {
     if (typeof window !== "undefined") {
@@ -84,6 +93,7 @@ export default function AccountPage() {
     setEditEmail(profile?.email ?? "");
     setPendingNewEmail(null);
     setVerificationCode("");
+    setSuccessMessage(null);
     setIsEditing(true);
   }
 
@@ -96,9 +106,30 @@ export default function AccountPage() {
     setVerificationCode("");
   }
 
+  function showSuccess(msg: string) {
+    setSuccessMessage(msg);
+    setTimeout(() => setSuccessMessage(null), 10000);
+  }
+
+  async function handleResendCode() {
+    setResending(true);
+    try {
+      await sendUserAttributeVerificationCode({ userAttributeKey: "email" });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to resend code",
+        variant: "destructive",
+      });
+    } finally {
+      setResending(false);
+    }
+  }
+
   async function saveProfile() {
     if (!cognitoId) return;
     setSaving(true);
+    setSuccessMessage(null);
     try {
       const trimmedEmail = editEmail.trim().toLowerCase();
       const trimmedFirstName = editFirstName.trim();
@@ -111,25 +142,19 @@ export default function AccountPage() {
       }
 
       if (emailChanged) {
-        const headers = await authHeaders();
-        const res = await fetch("/api/users/request-email-change", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ newEmail: trimmedEmail }),
+        const output = await updateUserAttributes({
+          userAttributes: { email: trimmedEmail },
         });
 
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          throw new Error(data.error ?? "Failed to send verification code");
+        if (output.email?.nextStep.updateAttributeStep === "CONFIRM_ATTRIBUTE_WITH_CODE") {
+          setPendingNewEmail(trimmedEmail);
+          setVerificationCode("");
+        } else {
+          await syncCurrentUserToDb();
+          await refreshProfile();
+          setIsEditing(false);
+          showSuccess("Email updated successfully.");
         }
-
-        setPendingNewEmail(trimmedEmail);
-        setVerificationCode("");
-        toast({
-          title: "Verification code sent",
-          description: `Check your current email (${profile?.email}) for the code. Enter it below to complete the email change.`,
-        });
       }
 
       if (namesChanged) {
@@ -164,11 +189,7 @@ export default function AccountPage() {
 
       if (!emailChanged) {
         setIsEditing(false);
-        toast({ title: "Profile updated", description: "Your name changes have been saved." });
-      } else if (!namesChanged) {
-        // Email change requested, names unchanged - keep editing open for code entry
-      } else {
-        toast({ title: "Names saved", description: "Check your current email for the verification code to complete the email change." });
+        showSuccess("Profile updated successfully.");
       }
     } catch (err) {
       toast({
@@ -184,37 +205,26 @@ export default function AccountPage() {
   async function confirmEmailChange() {
     const trimmedCode = verificationCode.trim();
 
-    if (!trimmedCode) {
-      toast({
-        title: "Verification code required",
-        description: "Enter the 6-digit code sent to your current email address.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!trimmedCode) return;
 
-    if (!pendingNewEmail) {
-      toast({
-        title: "Error",
-        description: "No pending email change. Please request a new code.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!pendingNewEmail) return;
 
     setVerifyingEmail(true);
     try {
+      await confirmUserAttribute({
+        userAttributeKey: "email",
+        confirmationCode: trimmedCode,
+      });
+
       const headers = await authHeaders();
       const res = await fetch("/api/users/confirm-email-change", {
         method: "POST",
         headers,
-        body: JSON.stringify({ newEmail: pendingNewEmail, code: trimmedCode }),
+        body: JSON.stringify({ newEmail: pendingNewEmail, code: "VERIFIED_BY_AMPLIFY" }),
       });
 
-      const data = await res.json().catch(() => ({}));
-
       if (!res.ok) {
-        throw new Error(data.error ?? "Failed to verify email change");
+        throw new Error("Cognito updated, but failed to sync to database.");
       }
 
       await refreshProfile();
@@ -222,11 +232,7 @@ export default function AccountPage() {
       setVerificationCode("");
       setEditEmail(pendingNewEmail);
       setIsEditing(false);
-
-      toast({
-        title: "Email updated",
-        description: "Your new email is now active in Cognito and synced to MySQL.",
-      });
+      showSuccess("Your email has been successfully updated and verified.");
     } catch (err) {
       toast({
         title: "Verification failed",
@@ -245,10 +251,6 @@ export default function AccountPage() {
 
   function togglePref(key: keyof Preferences) {
     setPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
-    toast({
-      title: "Preference updated",
-      description: `${key === "emailNotifications" ? "Email notifications" : "Budget alerts"} ${!prefs[key] ? "enabled" : "disabled"}.`,
-    });
   }
 
   const memberSince = profile?.createdAt
@@ -351,6 +353,13 @@ export default function AccountPage() {
                 )}
               </div>
 
+              {successMessage && (
+                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3 text-emerald-400 animate-in fade-in slide-in-from-top-2 duration-500">
+                  <CheckCircle2 size={18} className="shrink-0" />
+                  <p className="text-sm font-medium">{successMessage}</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-2">
                   <p className="text-[10px] uppercase font-bold tracking-widest text-white/20">First Name</p>
@@ -411,38 +420,50 @@ export default function AccountPage() {
               </div>
 
               {pendingNewEmail && (
-                <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-5 space-y-4">
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-6 space-y-4">
                   <div className="space-y-1">
                     <p className="text-sm font-bold text-amber-200">Verify your email change</p>
                     <p className="text-sm text-amber-100/80">
-                      We sent a 6-digit code to your current email <span className="font-semibold">{profile?.email}</span>.
-                      Enter it below to switch to <span className="font-semibold">{pendingNewEmail}</span>. Your current email stays active until verified.
+                      We sent a 6-digit code to your updated email <span className="font-semibold text-white">{pendingNewEmail}</span>.
+                      Enter it below to confirm your new email for this account.
                     </p>
                   </div>
                   <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                    <Input
-                      value={verificationCode}
-                      onChange={(e) => setVerificationCode(e.target.value)}
-                      placeholder="Enter 6-digit code"
-                      maxLength={6}
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/20 rounded-xl h-11 text-center tracking-widest font-mono text-lg"
-                    />
+                    <div className="relative flex-1">
+                      <Input
+                        value={verificationCode}
+                        onChange={(e) => setVerificationCode(e.target.value)}
+                        placeholder="6-digit code"
+                        maxLength={6}
+                        className="bg-white/5 border-white/10 text-white placeholder:text-white/20 rounded-xl h-11 pl-4 tracking-widest font-mono text-lg"
+                      />
+                    </div>
                     <div className="flex gap-2">
                       <Button
                         onClick={confirmEmailChange}
-                        disabled={verifyingEmail}
-                        className="bg-[#155885] hover:bg-[#1a6ba1] text-white rounded-xl font-bold"
+                        disabled={verifyingEmail || verificationCode.length < 6}
+                        className="bg-[#155885] hover:bg-[#1a6ba1] text-white rounded-xl font-bold flex-1 md:flex-none"
                       >
-                        {verifyingEmail ? <Loader2 size={14} className="animate-spin" /> : "Confirm email"}
+                        {verifyingEmail ? <Loader2 size={14} className="animate-spin" /> : "Verify"}
                       </Button>
                       <Button
                         variant="ghost"
                         onClick={cancelEmailVerification}
-                        className="text-white/60 hover:text-white hover:bg-white/5 rounded-xl font-bold"
+                        className="text-white/40 hover:text-white hover:bg-white/5 rounded-xl font-bold"
                       >
                         Cancel
                       </Button>
                     </div>
+                  </div>
+                  <div className="flex items-center justify-center pt-2">
+                    <button
+                      onClick={handleResendCode}
+                      disabled={resending}
+                      className="text-xs text-white/40 hover:text-[#155885] transition-colors flex items-center gap-1.5 font-semibold"
+                    >
+                      {resending ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+                      Didn't receive a code? Resend
+                    </button>
                   </div>
                 </div>
               )}
@@ -559,5 +580,25 @@ export default function AccountPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function CheckCircle2(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
   );
 }

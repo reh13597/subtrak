@@ -58,8 +58,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       setCognitoId(cId);
 
       if (!hasSynced.current) {
-        await syncCurrentUserToDb();
-        hasSynced.current = true;
+        const syncedId = await syncCurrentUserToDb();
+        if (syncedId) {
+          hasSynced.current = true;
+        } else {
+          console.warn("[UserProfile] User sync failed, profile fetch might fail with 401.");
+        }
       }
 
       await fetchProfile();

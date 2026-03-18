@@ -152,13 +152,13 @@ export default function Navbar() {
             ) : (
               <div className="flex items-center gap-3">
                 <Link
-                  href="/login"
+                  href="/login?mode=signin"
                   className="text-sm text-white/50 hover:text-white font-medium transition-colors"
                 >
                   Log in
                 </Link>
                 <Link
-                  href="/login"
+                  href="/login?mode=signup"
                   className="px-5 py-2 bg-gradient-to-r from-[#155885] to-[#1a8dd6] text-white text-sm font-semibold rounded-full hover:shadow-lg hover:shadow-[#155885]/25 transition-all duration-300 hover:-translate-y-px active:translate-y-0"
                 >
                   Get Started
@@ -216,13 +216,22 @@ export default function Navbar() {
                   </button>
                 </>
               ) : (
-                <Link
-                  href="/login"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="block w-full text-center px-6 py-3 bg-gradient-to-r from-[#155885] to-[#1a8dd6] text-white rounded-xl font-semibold text-sm transition-all"
-                >
-                  Get Started
-                </Link>
+                <div className="flex flex-col gap-2">
+                  <Link
+                    href="/login?mode=signin"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="block w-full text-center px-6 py-3 border border-white/10 text-white rounded-xl font-semibold text-sm transition-all"
+                  >
+                    Log In
+                  </Link>
+                  <Link
+                    href="/login?mode=signup"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="block w-full text-center px-6 py-3 bg-gradient-to-r from-[#155885] to-[#1a8dd6] text-white rounded-xl font-semibold text-sm transition-all"
+                  >
+                    Get Started
+                  </Link>
+                </div>
               )}
             </div>
           </div>

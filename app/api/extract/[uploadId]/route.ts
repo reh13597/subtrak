@@ -3,6 +3,7 @@ import { query, execute, getConnection } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { extractSubscriptionsFromFile, calculateNextBillingDate } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getFromS3 } from "@/lib/s3";
 import type { StatementUpload, ExtractedSubscriptionRow } from "@/lib/types/database";
 import type { RowDataPacket } from "mysql2/promise";
 
@@ -99,7 +100,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    if (!upload.fileData) {
+    if (!upload.s3Key && !upload.fileData) {
       return NextResponse.json({ error: "Upload has no file data" }, { status: 400 });
     }
 
@@ -108,8 +109,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       [id]
     );
 
+    let fileBuffer: Buffer;
+    if (upload.s3Key) {
+      fileBuffer = await getFromS3(upload.s3Key);
+    } else {
+      fileBuffer = Buffer.from(upload.fileData);
+    }
+
     const result = await extractSubscriptionsFromFile(
-      Buffer.from(upload.fileData),
+      fileBuffer,
       upload.mimeType,
       upload.fileName
     );

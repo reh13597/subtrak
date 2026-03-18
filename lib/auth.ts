@@ -37,7 +37,8 @@ export async function getAuthUser(request: Request): Promise<User | null> {
     );
 
     return rows[0] ?? null;
-  } catch {
+  } catch (error) {
+    console.error("getAuthUser verifier error:", error);
     return null;
   }
 }
@@ -59,7 +60,8 @@ export async function getVerifiedCognitoId(request: Request): Promise<string | n
   try {
     const payload = await verifier.verify(token);
     return payload.sub ?? null;
-  } catch {
+  } catch (error) {
+    console.error("getVerifiedCognitoId verifier error:", error);
     return null;
   }
 }

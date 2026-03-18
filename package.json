@@ -14,6 +14,7 @@
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.1",
     "@aws-sdk/client-cognito-identity-provider": "^3.1009.0",
+    "@aws-sdk/client-s3": "^3.1011.0",
     "@emailjs/browser": "^4.4.1",
     "@emailjs/nodejs": "^5.0.2",
     "@google/generative-ai": "^0.24.0",

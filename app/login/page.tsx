@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -53,6 +53,13 @@ function AuthForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Sync activeTab with searchParams mode
+  useEffect(() => {
+    const mode = searchParams.get("mode");
+    if (mode === "signup") setActiveTab("signup");
+    if (mode === "signin") setActiveTab("signin");
+  }, [searchParams]);
 
   // Stashed credentials for the confirm flow (auto sign-in after verify)
   const [pendingEmail, setPendingEmail] = useState("");
@@ -171,7 +178,7 @@ function AuthForm() {
 
         <CardHeader className="relative text-center pb-2">
           <CardTitle className="text-3xl font-bold text-white tracking-tight">
-            {activeTab === "confirm" ? "Check Your Email." : "Welcome Back."}
+            {activeTab === "confirm" ? "Check Your Email" : "Welcome Back"}
           </CardTitle>
           <CardDescription className="text-white/60 text-base mt-1">
             {activeTab === "confirm"
@@ -444,7 +451,7 @@ function AuthForm() {
                         <FormControl>
                           <Input
                             placeholder="Enter 6-digit code"
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus-visible:ring-[#155885] text-center tracking-widest font-mono text-lg"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus-visible:ring-[#155885]"
                             {...field}
                           />
                         </FormControl>
@@ -468,14 +475,14 @@ function AuthForm() {
                     )}
                   </Button>
 
-                  <p className="text-center text-sm pt-1">
+                  <p className="text-center text-white/50 text-sm pt-1">
+                    Didn't receive a code?{" "}
                     <button
                       type="button"
                       onClick={handleResendCode}
-                      className="text-white/50 hover:text-white transition"
+                      className="text-white font-bold hover:text-[#155885] transition"
                     >
-                      Didn&apos;t receive a code?{" "}
-                      <span className="font-bold">Resend</span>
+                      Resend
                     </button>
                   </p>
                 </form>

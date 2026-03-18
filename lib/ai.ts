@@ -1,9 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
-
 export const extractionSchema = z.array(
   z.object({
     name: z.string(),
@@ -67,6 +64,17 @@ export async function extractSubscriptionsFromFile(
   fileName: string
 ): Promise<{ success: true; data: ExtractedSubscription[] } | { success: false; error: string }> {
   try {
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
+    if (!apiKey) {
+      return { success: false, error: "GEMINI_API_KEY is missing from environment variables." };
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    // Use the exact model name discovered in your curl output
+    const model = genAI.getGenerativeModel(
+      { model: "gemini-2.5-flash" }
+    );
+
     const resolvedMime = mimeTypeForFile(mimeType, fileName);
     const base64Data = fileData.toString("base64");
 
