@@ -4,25 +4,9 @@ SubTrak is a responsive full-stack subscription tracking application designed to
 
 ## Tech Stack
 
-Front-End:
-- Next.js
-- TypeScript
-- Tailwind CSS
-- ShadCN UI
-
-Back-End:
-- AWS RDS (MySQL) + S3
-- Next.js API Routes
-
-Authentication:
-- AWS Cognito + Lambda
-
-Deployment:
-- AWS Amplify
-
-APIs:
-- Google Gemini API
-- EmailJS
+| **Front-End** | **Back-End** | **Authentication** | **Deployment** | **APIs** |
+| :--------: | :--------: | :--------: | :--------: | :--------: |
+| Next.js, TypeScript, <br> Tailwind CSS, ShadCN UI | AWS RDS (MySQL) + S3, <br> Next.js API Routes | AWS Cognito + Lambda |  AWS Amplify | EmailJS, <br> Google Gemini API
 
 ## Team Members
 - Alex Guo
