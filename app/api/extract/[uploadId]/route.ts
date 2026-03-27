@@ -112,8 +112,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     let fileBuffer: Buffer;
     if (upload.s3Key) {
       fileBuffer = await getFromS3(upload.s3Key);
-    } else {
+    } else if (upload.fileData) {
       fileBuffer = Buffer.from(upload.fileData);
+    } else {
+      return NextResponse.json({ error: "Upload has no file data" }, { status: 400 });
     }
 
     const result = await extractSubscriptionsFromFile(
