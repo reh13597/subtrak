@@ -1,0 +1,45 @@
+---
+description: Core architecture, code quality, and correction memory rules for SubTrak
+alwaysApply: true
+---
+
+# SubTrak Core Rules
+
+## Architecture
+- Next.js App Router with TypeScript strict mode
+- shadcn/ui before custom UI components
+- Modular, reusable components; small focused files
+- Server-safe patterns: secrets only in server code (API routes, server components)
+
+## File Ownership
+Before any change, identify: which file owns the logic, whether it belongs in UI / business logic / API / database, and whether an existing util already solves it.
+
+## Separation of Concerns
+- UI components: no heavy business logic
+- API routes: no duplicated parsing; use shared Zod schemas from `lib/validations/`
+- Database logic: isolated in Prisma queries via `lib/prisma.ts`
+- AI parsing: `lib/ai.ts`
+- Auth helpers: `lib/auth.ts`
+
+## No Duplication
+If similar logic appears twice, refactor into shared utilities/hooks/components.
+
+## Safe & Explicit Code
+- Validate all input with Zod
+- Handle loading, error, and empty states in every screen
+- Never use `any` unless unavoidable; prefer strong types
+- No magic strings; use enums and constants
+
+## Correction Memory Format
+For every correction:
+```
+- Mistake:
+- Root cause:
+- Fix:
+- Prevention rule:
+```
+
+When a mistake repeats, refactor the system rather than patching. If the user says a previous approach was wrong, pivot immediately.
+
+## Delivery
+After each substantial change, note: changed files, what changed, why, and any follow-up risks.

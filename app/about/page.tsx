@@ -8,10 +8,10 @@ export default function AboutPage() {
       {/* Hero Section */}
       <section className="max-w-4xl mx-auto text-center space-y-8">
         <h1 className="text-5xl md:text-7xl font-black text-white tracking-tight leading-tight">
-          We're on a mission to <span className="text-[#155885]">simplify</span> your digital life.
+          We're on a mission to <span className="text-[#155885]">simplify</span> your life.
         </h1>
         <p className="text-xl text-white/50 leading-relaxed max-w-2xl mx-auto">
-          SubTrak was born out of a simple realization: managing digital subscriptions shouldn't be a full-time job. 
+          SubTrak was born out of a simple realization: managing subscriptions shouldn't be a full-time job.
           We're building the tools to help you regain control of your monthly finances.
         </p>
       </section>
@@ -36,12 +36,12 @@ export default function AboutPage() {
           <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight">Our Story</h2>
           <div className="space-y-6 text-white/60 text-lg leading-relaxed">
             <p>
-              SubTrak started as a university project at SFU (CMPT 354), driven by the common frustration of "subscription fatigue." 
+              SubTrak started as a university project at SFU, driven by the common frustration of "subscription fatigue."
               We noticed that our friends and family were losing hundreds of dollars every year to services they had forgotten they were paying for.
             </p>
             <p>
-              We decided to build a platform that doesn't just list your subscriptions, but provides the insights and automation needed 
-              to make smart financial decisions. Today, SubTrak is a labor of love, built with the latest technologies to ensure 
+              We decided to build a platform that doesn't just list your subscriptions, but provides the insights and automation needed
+              to make smart financial decisions. Today, SubTrak is a labor of love, built with the latest technologies to ensure
               security, speed, and a world-class user experience.
             </p>
           </div>

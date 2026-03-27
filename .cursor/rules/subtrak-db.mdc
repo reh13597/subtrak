@@ -1,0 +1,36 @@
+---
+description: Database and Prisma rules for SubTrak
+alwaysApply: true
+---
+
+# SubTrak Database Rules
+
+## Stack
+- MySQL on AWS RDS via Prisma ORM
+- Prisma client singleton in `lib/prisma.ts`
+- Raw `mysql2` pool kept in `lib/db.ts` only as legacy fallback
+
+## Prisma Discipline
+- If a model changes, update related types, queries, and forms
+- Keep naming consistent (camelCase fields, PascalCase models)
+- Use enums for billing cycles, statuses, review states
+- All core entities must have `createdAt` / `updatedAt` timestamps
+
+## CRUD Safety
+- Create/update/delete only for the authenticated user's records
+- Validate payloads with Zod before any DB write
+- Return typed responses from API routes
+- Handle not-found (404) and unauthorized (401/403) states cleanly
+
+## Query Patterns
+```typescript
+// Always scope to user
+const subs = await prisma.subscription.findMany({
+  where: { userId: currentUser.id },
+});
+```
+
+## Migration
+- Use `prisma db push` for development
+- Before production, switch to `prisma migrate`
+- Never run destructive migrations without explicit confirmation

@@ -3,6 +3,9 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AmplifyConfig from "@/components/AmplifyConfig";
+import Providers from "@/components/Providers";
+import PageTransition from "@/components/layout/PageTransition";
+import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
   title: "SubTrak",
@@ -17,14 +20,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased min-h-screen flex flex-col">
-        {/* Client-side Amplify configuration */}
         <AmplifyConfig />
-        
-        <Navbar />
-        <main className="flex-grow">
-          {children}
-        </main>
-        <Footer />
+        <Providers>
+          <Navbar />
+          <main className="flex-grow">
+            <PageTransition>{children}</PageTransition>
+          </main>
+          <Footer />
+        </Providers>
+        <Toaster />
       </body>
     </html>
   );

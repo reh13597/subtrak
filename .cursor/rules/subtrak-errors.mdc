@@ -1,0 +1,156 @@
+---
+description: Living error log - records every error encountered and its fix to prevent recurrence
+alwaysApply: true
+---
+
+# SubTrak Error Log
+
+This file is a living document. Every time a runtime, build, or type error is encountered and fixed, append an entry below using the format shown. The agent MUST read this file before making any changes to avoid repeating known mistakes.
+
+---
+
+## Error: Amplify SSR Hydration Mismatch
+- Symptom: `Text content does not match server-rendered HTML` when using Amplify auth state in components
+- Root cause: Amplify auth state is client-only; server render produces different HTML than client hydration
+- Fix: All components using `getCurrentUser()`, `Hub.listen()`, or any Amplify auth API must have `'use client'` directive. Initialize Amplify in a dedicated client component (`AmplifyConfig.tsx`) that renders `null`.
+- Prevention: Never call Amplify auth functions in server components. Always add `'use client'` to any file importing from `aws-amplify/auth` or `aws-amplify/utils`.
+
+## Error: Prisma Client Multiple Instances in Dev
+- Symptom: `warn(prisma-client) Already 10 Prisma Clients actively running` in dev mode
+- Root cause: Next.js hot reload creates new Prisma client instances on every file change
+- Fix: Use singleton pattern in `lib/prisma.ts`:
+  ```typescript
+  const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+  export const prisma = globalForPrisma.prisma || new PrismaClient();
+  if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+  ```
+- Prevention: Never instantiate `new PrismaClient()` outside `lib/prisma.ts`. Always import from `@/lib/prisma`.
+
+## Error: Gemini Invalid JSON Response
+- Symptom: `SyntaxError: Unexpected token` when parsing Gemini output
+- Root cause: Gemini sometimes wraps JSON in markdown code fences or adds commentary
+- Fix: Strip markdown fences before parsing: `response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()`. Then `JSON.parse()` inside try/catch. Validate with Zod after parsing.
+- Prevention: Always instruct Gemini to return raw JSON only (no markdown, no commentary). Always wrap parse in try/catch with fallback error message.
+
+## Error: Tailwind v4 CSS Variable Conflicts with shadcn
+- Symptom: shadcn components appear unstyled or with wrong colors after init
+- Root cause: Tailwind v4 uses `@theme inline` block and CSS custom properties that can conflict with shadcn's default CSS variable names
+- Fix: After `shadcn init`, verify that `globals.css` merges both the project's existing custom properties and shadcn's required variables.
+- Prevention: After any shadcn init or component add, check `globals.css` for conflicts.
+
+## Error: Prisma preinstall script fails on Windows with npm 10.x
+- Symptom: `ERR_INVALID_ARG_TYPE: The "file" argument must be of type string. Received undefined` during `npm install`
+- Root cause: Prisma's `preinstall` script spawns a child process that fails under npm 10.9.x on Windows due to an undefined binary path
+- Fix: Run `npm install --legacy-peer-deps --ignore-scripts` then `npx prisma generate` manually after install completes
+- Prevention: Always use `--ignore-scripts` when installing on this project. Run `npx prisma generate` as a separate step after install.
+
+## Error: Next.js 16 middleware deprecation warning
+- Symptom: Build warning `The "middleware" file convention is deprecated. Please use "proxy" instead.`
+- Root cause: Next.js 16 renamed the `middleware.ts` convention to `proxy.ts`
+- Fix: The middleware still works in v16 but shows a deprecation warning. When ready, rename `middleware.ts` to `proxy.ts` and update the export to use the new API.
+- Prevention: For Next.js 16+ projects, use the `proxy.ts` convention instead of `middleware.ts`.
+
+## Error: Prisma v6 generated client has no index.ts
+- Symptom: `Cannot find module '@/lib/generated/prisma'` when importing PrismaClient
+- Root cause: Prisma v6 `prisma-client` generator outputs `client.ts` and `enums.ts` but no `index.ts` barrel file, so directory imports fail
+- Fix: Create `lib/generated/prisma/index.ts` that re-exports from `./client` and `./enums`. This file will be overwritten on `prisma generate`, so re-create it manually after each generate.
+- Prevention: After every `npx prisma generate`, verify that `lib/generated/prisma/index.ts` exists.
+
+## Error: Hydration mismatch from auth-dependent rendering
+- Symptom: React warning "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties"
+- Root cause: Navbar and Footer rendered different HTML on server (user=null) vs client (user=authenticated), causing SSR/CSR mismatch
+- Fix: Add a `mounted` state initialized to `false`, set to `true` in `useEffect`. Gate all auth-dependent rendering on `mounted && user` instead of just `user`. Render a placeholder before mount.
+- Prevention: Any client component that conditionally renders based on auth state MUST use a `mounted` guard to prevent hydration mismatches.
+
+## Error: Nested button inside button in StatementUploader
+- Symptom: Console error `<button> cannot contain a nested <button>`
+- Root cause: The upload drop zone was a `<button>` element containing a child `<button>` for clearing the file
+- Fix: Changed the outer `<button>` to a `<div role="button" tabIndex={0}>` with keyboard handler
+- Prevention: Never nest interactive HTML elements (`<button>`, `<a>`) inside other interactive elements. Use `<div role="button">` for container-level click targets.
+
+## Error: Failed to sync user to database after Cognito confirmation
+- Symptom: Console error "Failed to sync user to database" after signup confirmation
+- Root cause: The login page used dynamic `import("aws-amplify/auth")` which is fragile and can fail silently
+- Fix: Import `getCurrentUser` statically. Created shared `lib/sync-user.ts` with `syncCurrentUserToDb()`.
+- Prevention: Never use dynamic `import()` for auth modules. Always use static imports for `aws-amplify/auth` functions.
+
+## Error: Unauthorized on API calls after database recreation
+- Symptom: `401 Unauthorized` on upload/subscription API calls even though user is logged in
+- Root cause: User sync to DB only happened during signup confirmation. After DB recreation, user record is missing while Cognito session is still valid.
+- Fix: Created `lib/sync-user.ts` with `syncCurrentUserToDb()` that uses `getCurrentUser()` + `fetchUserAttributes()` to upsert the user record. Called on login, signup confirmation, and on page load for all auth-protected pages.
+- Prevention: Always call `syncCurrentUserToDb()` on any auth-protected page's initial load. This ensures the user record exists even if the DB was reset.
+
+## Error: pdf-parse v2 "fake worker" / "cannot find module" in Node.js
+- Symptom: `pdfParse is not a function` then `Error setting up fake worker: Cannot find module`
+- Root cause: `pdf-parse` v2.4.x tries to set up a web worker, which fails in Node.js API routes
+- Fix: Removed all server-side PDF text extraction. Instead, send the raw PDF file directly to Gemini as base64 `inlineData`. Gemini natively reads PDFs via its multimodal API.
+- Prevention: For PDF processing, prefer sending files directly to Gemini's multimodal API rather than extracting text server-side. Avoids all Node.js/worker compatibility issues.
+
+## Error: Gemini API quota exceeded on gemini-2.0-flash
+- Symptom: `429 RESOURCE_EXHAUSTED: Quota exceeded` when calling Gemini API
+- Root cause: Free-tier quota limits on `gemini-2.0-flash` model were hit
+- Fix: Switched to `gemini-3-flash-preview` which has separate quota limits
+- Prevention: Monitor API usage. Keep model name in `lib/ai.ts` as a single source of truth so it can be changed easily. Consider adding retry logic with exponential backoff for rate limits.
+
+## Error: Account page edit/preferences not functional
+- Symptom: "Edit" button on account settings does nothing. Preference toggles are static HTML with no click handlers.
+- Root cause: Account page was a static mockup — no state management, no API calls, no form handling
+- Fix: Rewrote account page with editable profile fields (React Hook Form + Zod), functional toggle switches with state, API routes for GET/PUT user profile, and `syncCurrentUserToDb()` on load.
+- Prevention: Never ship static mockup UI for interactive features. Always wire up state management and API calls when building forms and toggles.
+
+## Security Fix: Authentication Forgeable via Client-Sent Header (CRITICAL)
+- Symptom: API routes trusted `x-user-cognito-id` header for authentication, allowing impersonation
+- Root cause: No server-side JWT verification. Any attacker could set this header to any Cognito ID.
+- Fix: Installed `aws-jwt-verify`. Rewrote `lib/auth.ts` to use `CognitoJwtVerifier` which verifies Cognito ID tokens against the JWKS endpoint. Created `lib/client-auth.ts` with `getIdToken()`, `authHeaders()`, and `authHeadersFormData()` helpers to send Bearer tokens from client. Updated ALL API calls and hooks to use JWT tokens instead of raw cognitoId headers.
+- Prevention: Never trust client-supplied identity headers. Always verify JWTs server-side. Use `requireAuth(request)` from `lib/auth.ts` in every API route.
+
+## Security Fix: /api/users POST Unauthenticated (CRITICAL)
+- Symptom: Anyone could POST to `/api/users` to create/update user records for any cognitoId
+- Root cause: The endpoint had zero authentication — it accepted any cognitoId in the body
+- Fix: Added JWT verification via `getVerifiedCognitoId(request)`. Validates that the JWT `sub` matches the submitted cognitoId. Added Zod input validation.
+- Prevention: Every API route that writes data must call `requireAuth()` or `getVerifiedCognitoId()`. Never accept unverified identity in request body.
+
+## Security Fix: cognitoId Leaked in Profile API Response (LOW)
+- Symptom: `GET /api/users/profile` returned `cognitoId` field to the client
+- Root cause: The response included all user fields without filtering
+- Fix: Removed `cognitoId` from the JSON response in both GET and PUT handlers
+- Prevention: Never return internal identifiers (cognitoId, AWS IDs) in API responses. Only return fields the client needs.
+
+## Security Fix: Unsafe Type Casts in Subscriptions API (MEDIUM)
+- Symptom: Query parameters for `status` and `billingCycle` used `as` casts without validation
+- Root cause: `searchParams.get()` returns raw strings that were cast to Prisma enum types without checking
+- Fix: Added Zod `querySchema` with `z.enum()` validation for `status`, `billingCycle`, and `z.string().max(200)` for `search`. Only validated values reach the Prisma query.
+- Prevention: Always validate query parameters with Zod before passing to database queries. Never use `as` casts on user input.
+
+## Security Fix: No Rate Limiting on Gemini Extraction (HIGH)
+- Symptom: A user could call `POST /api/extract/:id` unlimited times, running up Gemini API costs
+- Root cause: No rate limiting on the extraction endpoint
+- Fix: Created `lib/rate-limit.ts` with in-memory rate limiter. Applied to extract POST: 5 requests per hour per user. Returns 429 with retry-after when exceeded.
+- Prevention: All AI/external API endpoints must have rate limiting. Use `checkRateLimit()` from `lib/rate-limit.ts`.
+
+## Security Fix: Redundant syncCurrentUserToDb Calls (MEDIUM)
+- Symptom: `syncCurrentUserToDb()` called on every page load, making unnecessary API calls
+- Root cause: Every auth-protected page independently called sync on mount
+- Fix: Centralized sync to `UserProfileProvider` with a `hasSynced` ref that prevents re-syncing within the same session. Reset on sign-in/sign-out events.
+- Prevention: Use the `UserProfileProvider` as the single source of truth for user sync. Never call `syncCurrentUserToDb()` from individual pages.
+
+## Security Fix: console.error Leaking Sensitive Data (LOW)
+- Symptom: Error details (stack traces, auth errors) logged to browser console in production
+- Root cause: `console.error()` calls in catch blocks for sign-out and EmailJS errors
+- Fix: Removed all `console.error()` calls from client-side code. Errors are shown to users via toast notifications only.
+- Prevention: Never use `console.error()` in production client code. Use toast notifications for user-facing errors. For server-side, use structured logging.
+
+---
+<!-- NEW ERRORS: Append below this line -->
+
+## Error: Profile edits overwritten on refresh after MySQL migration
+- Symptom: Updating profile data in the account page appeared to work immediately, but a full page refresh restored older values from Cognito
+- Root cause: The account page saved names directly to MySQL while `syncCurrentUserToDb()` treated Cognito as the source on refresh. This created two competing sources of truth.
+- Fix: Changed the account page to update Cognito attributes first, then call `syncCurrentUserToDb()`. Restored `/api/users` upsert to mirror `email`, `firstName`, and `lastName` from Cognito into MySQL.
+- Prevention: Keep Cognito as the single source of truth for editable profile identity fields. Do not write those fields directly to MySQL from the client. Always update Cognito first, then sync the DB copy.
+
+## Error: Email verification UI missing after Cognito email change
+- Symptom: Changing email triggered Cognito verification, but the account page had no field to enter the confirmation code, leaving users stuck in a pending state
+- Root cause: The save flow handled `CONFIRM_ATTRIBUTE_WITH_CODE` with a toast only and did not render a follow-up confirmation form. It also risked syncing an unverified email into MySQL.
+- Fix: Replaced Cognito email-update flow with a custom "verify via current email first" flow: request-email-change sends a code to the user's current email via EmailJS, confirm-email-change verifies the code then updates Cognito via Admin API and MySQL. Matches signup UX.
+- Prevention: Email changes must verify via the current/registered email before switching. Use custom backend flow (PendingEmailChange table, EmailJS, AdminUpdateUserAttributes) instead of Cognito's built-in updateUserAttributes for email.
