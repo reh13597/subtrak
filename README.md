@@ -11,5 +11,5 @@ SubTrak is a responsive full-stack subscription tracking application designed to
 ## Team Members
 - Alex Guo
 - Amir Matianiu
-- Arthur Yurtseven
+- Ertugrul (Arthur) Yurtseven
 - Jim Chen
