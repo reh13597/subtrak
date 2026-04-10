@@ -10,7 +10,7 @@ export const extractionSchema = z.array(
     providerUrl: z.string().optional(),
     lastChargeDate: z.string().optional(),
     confidenceScore: z.number().min(0).max(1),
-  })
+  }),
 );
 
 export type ExtractedSubscription = z.infer<typeof extractionSchema>[number];
@@ -33,12 +33,16 @@ Important:
 Return ONLY a raw JSON array. No markdown, no code fences, no commentary. If no subscriptions are found, return an empty array [].`;
 
 function mimeTypeForFile(mimeType: string | null, fileName: string): string {
-  if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) return "application/pdf";
+  if (mimeType === "application/pdf" || fileName.endsWith(".pdf"))
+    return "application/pdf";
   if (mimeType === "text/csv" || fileName.endsWith(".csv")) return "text/csv";
   return mimeType || "application/octet-stream";
 }
 
-export function calculateNextBillingDate(lastChargeDate: string, billingCycle: string): Date {
+export function calculateNextBillingDate(
+  lastChargeDate: string,
+  billingCycle: string,
+): Date {
   const date = new Date(lastChargeDate);
 
   switch (billingCycle) {
@@ -61,19 +65,23 @@ export function calculateNextBillingDate(lastChargeDate: string, billingCycle: s
 export async function extractSubscriptionsFromFile(
   fileData: Buffer,
   mimeType: string | null,
-  fileName: string
-): Promise<{ success: true; data: ExtractedSubscription[] } | { success: false; error: string }> {
+  fileName: string,
+): Promise<
+  | { success: true; data: ExtractedSubscription[] }
+  | { success: false; error: string }
+> {
   try {
     const apiKey = process.env.GEMINI_API_KEY?.trim();
     if (!apiKey) {
-      return { success: false, error: "GEMINI_API_KEY is missing from environment variables." };
+      return {
+        success: false,
+        error: "GEMINI_API_KEY is missing from environment variables.",
+      };
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
     // Use the exact model name discovered in your curl output
-    const model = genAI.getGenerativeModel(
-      { model: "gemini-2.5-flash" }
-    );
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const resolvedMime = mimeTypeForFile(mimeType, fileName);
     const base64Data = fileData.toString("base64");
@@ -102,7 +110,8 @@ export async function extractSubscriptionsFromFile(
     } catch {
       return {
         success: false,
-        error: "Failed to parse AI response as JSON. The model returned an invalid format.",
+        error:
+          "Failed to parse AI response as JSON. The model returned an invalid format.",
       };
     }
 
@@ -117,7 +126,8 @@ export async function extractSubscriptionsFromFile(
 
     return { success: true, data: validated.data };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error during AI extraction";
+    const message =
+      err instanceof Error ? err.message : "Unknown error during AI extraction";
     return { success: false, error: message };
   }
 }

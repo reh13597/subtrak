@@ -1,0 +1,1 @@
+{"sessionId":"602f0a","location":"lib/db.ts:5","message":"DB pool init env vars","data":{"DB_HOST":"database-2.c9eos8i6ql3c.us-east-2.rds.amazonaws.com","DB_USER":"benjamin69","DB_NAME":"subtrak","DB_PORT_parsed":null,"NODE_ENV":"development"},"timestamp":1775787816232,"hypothesisId":"A-B-C-D"}

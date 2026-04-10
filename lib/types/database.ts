@@ -35,6 +35,7 @@ export interface StatementUpload {
   userId: number;
   fileName: string;
   fileData: Buffer | null;
+  s3Key: string | null;
   mimeType: string | null;
   status: UploadStatus;
   createdAt: Date;
