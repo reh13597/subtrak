@@ -80,3 +80,39 @@ CREATE TABLE IF NOT EXISTS `ExtractedSubscription` (
   KEY `ExtractedSubscription_uploadId_idx` (`uploadId`),
   CONSTRAINT `ExtractedSubscription_uploadId_fk` FOREIGN KEY (`uploadId`) REFERENCES `StatementUpload` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- Referential integrity & CASCADE (course demo)
+-- Deleting a User removes: PendingEmailChange, Subscription, StatementUpload rows.
+-- Deleting a StatementUpload removes: ExtractedSubscription rows (ON DELETE CASCADE on FKs above).
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- Triggers (MySQL has no SQL ASSERTION; triggers enforce extra row-level rules.)
+-- Apply with mysql client: source this file, or paste the block below.
+-- Existing databases: run once; DROP IF EXISTS keeps re-runs idempotent.
+-- ---------------------------------------------------------------------------
+DROP TRIGGER IF EXISTS `subscription_price_before_insert`;
+DROP TRIGGER IF EXISTS `subscription_price_before_update`;
+
+DELIMITER $$
+
+CREATE TRIGGER `subscription_price_before_insert`
+BEFORE INSERT ON `Subscription`
+FOR EACH ROW
+BEGIN
+  IF NEW.price < 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Subscription price cannot be negative';
+  END IF;
+END$$
+
+CREATE TRIGGER `subscription_price_before_update`
+BEFORE UPDATE ON `Subscription`
+FOR EACH ROW
+BEGIN
+  IF NEW.price < 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Subscription price cannot be negative';
+  END IF;
+END$$
+
+DELIMITER ;

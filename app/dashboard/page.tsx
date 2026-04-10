@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { MetricCard } from "@/components/dashboard/MetricCard";
+import { CourseAnalyticsPanel } from "@/components/dashboard/CourseAnalyticsPanel";
 import { SubscriptionTable } from "@/components/subscriptions/SubscriptionTable";
 import { SubscriptionModal } from "@/components/subscriptions/SubscriptionModal";
 import { SubscriptionForm } from "@/components/subscriptions/SubscriptionForm";
@@ -243,6 +244,8 @@ export default function Dashboard() {
           />
         )}
       </div>
+
+      <CourseAnalyticsPanel cognitoId={cognitoId} />
 
       <SubscriptionModal
         subscription={selectedSub}
