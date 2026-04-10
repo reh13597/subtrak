@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
-import { query } from "@/lib/db";
+import { query, isDbConnectivityError } from "@/lib/db";
 import type { User } from "@/lib/types/database";
 import type { RowDataPacket } from "mysql2/promise";
 
@@ -25,21 +25,35 @@ export async function getAuthUser(request: Request): Promise<User | null> {
     return null;
   }
 
+  let cognitoId: string;
   try {
     const payload = await verifier.verify(token);
-    const cognitoId = payload.sub;
+    if (!payload.sub) return null;
+    cognitoId = payload.sub;
+  } catch (error) {
+    console.error("getAuthUser JWT verify failed:", error);
+    return null;
+  }
 
-    if (!cognitoId) return null;
-
+  try {
     const rows = await query<(User & RowDataPacket)[]>(
       "SELECT * FROM User WHERE cognitoId = ? LIMIT 1",
       [cognitoId]
     );
-
     return rows[0] ?? null;
   } catch (error) {
-    console.error("getAuthUser verifier error:", error);
-    return null;
+    if (isDbConnectivityError(error)) {
+      console.error("getAuthUser database unreachable:", error);
+      throw NextResponse.json(
+        {
+          error: "Database temporarily unavailable",
+          code: "DB_UNAVAILABLE",
+        },
+        { status: 503 }
+      );
+    }
+    console.error("getAuthUser database error:", error);
+    throw NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 

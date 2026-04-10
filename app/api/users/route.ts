@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { query, execute } from "@/lib/db";
+import { query, execute, isDbConnectivityError } from "@/lib/db";
 import { getVerifiedCognitoId } from "@/lib/auth";
 import { z } from "zod";
 import type { User } from "@/lib/types/database";
@@ -72,10 +72,19 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("[api/users] POST Error:", err);
     if (err instanceof NextResponse) return err;
+    if (isDbConnectivityError(err)) {
+      return NextResponse.json(
+        {
+          error: "Database temporarily unavailable",
+          code: "DB_UNAVAILABLE",
+        },
+        { status: 503 }
+      );
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ 
-      error: "Failed to upsert user",
-      detail: message 
-    }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to upsert user", detail: message },
+      { status: 500 }
+    );
   }
 }

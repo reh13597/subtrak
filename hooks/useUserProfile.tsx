@@ -45,6 +45,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
+      } else if (res.status === 503 && process.env.NODE_ENV === "development") {
+        console.warn(
+          "[UserProfile] Profile API: database unreachable (503). Check RDS security group and DB_HOST."
+        );
       }
     } catch {
       // silent fail

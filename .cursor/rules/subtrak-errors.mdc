@@ -154,3 +154,16 @@ This file is a living document. Every time a runtime, build, or type error is en
 - Root cause: The save flow handled `CONFIRM_ATTRIBUTE_WITH_CODE` with a toast only and did not render a follow-up confirmation form. It also risked syncing an unverified email into MySQL.
 - Fix: Replaced Cognito email-update flow with a custom "verify via current email first" flow: request-email-change sends a code to the user's current email via EmailJS, confirm-email-change verifies the code then updates Cognito via Admin API and MySQL. Matches signup UX.
 - Prevention: Email changes must verify via the current/registered email before switching. Use custom backend flow (PendingEmailChange table, EmailJS, AdminUpdateUserAttributes) instead of Cognito's built-in updateUserAttributes for email.
+
+## Error: MySQL connect ETIMEDOUT masquerading as 401 / slow login
+- Symptom: `connect ETIMEDOUT` in server logs; `POST /api/users` 500; `GET /api/users/profile` and subscriptions return 401; login feels very slow; browser shows `[sync-user] Sync API failed: 500 {}`
+- Root code-side contributors: `getAuthUser` caught DB errors in the same block as JWT failures and returned null → misleading 401; login page called `syncCurrentUserToDb()` while `UserProfileProvider` also synced on `signedIn` → double long waits; empty client error body when JSON parse failed; pool had no `connectTimeout`
+- Root infrastructure cause: TCP cannot reach RDS (security group / IP allowlist, RDS stopped, wrong `DB_HOST`, VPN required, or local firewall)
+- Fix: Added `isDbConnectivityError`, pool `connectTimeout` + default port 3306; split JWT vs DB in `getAuthUser` and return 503 `DB_UNAVAILABLE` for connectivity failures; same for `POST /api/users`; removed duplicate sync from login/confirm (rely on `UserProfileProvider`); improved client error parsing and subscription error message for 503
+- Prevention: Do not treat DB connectivity failures as unauthenticated. Keep user sync only in `UserProfileProvider` after sign-in (not duplicate on login page). After infra changes, verify RDS inbound rules allow the dev machine’s public IP on port 3306 (or use Session Manager / bastion).
+
+## Error: Local works, AWS Amplify production API routes cannot reach RDS
+- Symptom: `npm run dev` connects to MySQL; deployed Amplify site returns 503/500 on `/api/subscriptions` and sync; `GET /api/health/db` may show `step: "env"` with missing `DB_*`
+- Root cause: Amplify Hosting does not pass console env vars into the Next.js SSR/Lambda runtime by default; `process.env.DB_HOST` etc. are empty in production unless written to `.env.production` during build (see AWS doc “Making environment variables accessible to server-side runtimes”)
+- Fix: In `amplify.yml` build phase, before `npm run build`, run `env | grep` lines that append `DB_*`, `GEMINI_*`, `NEXT_AWS_*`, `S3_*`, `EMAILJS_*`, and `NEXT_PUBLIC_*` into `.env.production`; keep the same names in Amplify Console → Environment variables; redeploy
+- Prevention: After adding a new server-only secret, add its prefix to the `amplify.yml` grep lines (or rely on a shared prefix like `^DB_`)

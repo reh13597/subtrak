@@ -9,7 +9,6 @@ import {
   confirmSignUp,
   resendSignUpCode,
 } from "aws-amplify/auth";
-import { syncCurrentUserToDb } from "@/lib/sync-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Loader2,
@@ -92,7 +91,6 @@ function AuthForm() {
     setIsLoading(true);
     try {
       await signIn({ username: data.email, password: data.password });
-      await syncCurrentUserToDb();
       setSuccess("Success! Redirecting to dashboard...");
       setTimeout(() => router.push(redirectTo), 1500);
     } catch (err: any) {
@@ -143,7 +141,6 @@ function AuthForm() {
       });
 
       await signIn({ username: data.email, password: pendingPassword });
-      await syncCurrentUserToDb();
 
       setSuccess("Account verified! Welcome to SubTrak.");
       setTimeout(() => router.push("/dashboard"), 1500);

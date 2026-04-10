@@ -6,6 +6,10 @@ frontend:
         - npm install
     build:
       commands:
+        # Next.js SSR / API routes on Amplify only see env vars that are written into .env.production at build time.
+        # Set the same names in Amplify Console → App settings → Environment variables (per branch).
+        - env | grep -e '^DB_' -e '^GEMINI_' -e '^NEXT_AWS_' -e '^S3_' -e '^EMAILJS_' >> .env.production
+        - env | grep -e '^NEXT_PUBLIC_' >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
