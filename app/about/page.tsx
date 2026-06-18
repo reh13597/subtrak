@@ -1,6 +1,6 @@
 "use client";
 
-import { Shield, Users, Zap, Heart, Globe, Award } from "lucide-react";
+import { Shield, Users, Zap, Heart } from "lucide-react";
 
 export default function AboutPage() {
   return (

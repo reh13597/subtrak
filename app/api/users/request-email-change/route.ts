@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { execute, query } from "@/lib/db";
+import { execute } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { sendEmailChangeVerification } from "@/lib/send-verification-email";
 import { z } from "zod";
-import type { RowDataPacket } from "mysql2/promise";
 
 const requestSchema = z.object({
   newEmail: z.string().email("Invalid email address"),

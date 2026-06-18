@@ -9,7 +9,7 @@ export async function getIdToken(): Promise<string | null> {
     return cachedToken;
   }
 
-  let lastError: any = null;
+  let lastError: unknown = null;
   for (let i = 0; i < 3; i++) {
     try {
       const session = await fetchAuthSession();

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, execute } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { subscriptionUpdateSchema } from "@/lib/validations/subscription";
+import { z } from "zod";
 import type { Subscription } from "@/lib/types/database";
 import type { RowDataPacket } from "mysql2/promise";
 
@@ -62,7 +63,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { id: _id, ...data } = subscriptionUpdateSchema.parse({ ...body, id: subscriptionId });
+    const parsed = subscriptionUpdateSchema.parse({ ...body, id: subscriptionId });
+    const { id: validatedId, ...data } = parsed;
+    void validatedId;
 
     const setClauses: string[] = ["updatedAt = NOW()"];
     const updateParams: (string | number | boolean | null | Date)[] = [];
@@ -92,8 +95,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
     return NextResponse.json(updated[0]);
   } catch (err) {
     if (err instanceof NextResponse) return err;
-    if (err instanceof Error && err.name === "ZodError") {
-      return NextResponse.json({ error: (err as any).issues }, { status: 400 });
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: err.issues }, { status: 400 });
     }
     const message = err instanceof Error ? err.message : "Failed to update subscription";
     return NextResponse.json({ error: message }, { status: 500 });

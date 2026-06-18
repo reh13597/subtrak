@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -53,18 +53,9 @@ function AuthForm() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Sync activeTab with searchParams mode
-  useEffect(() => {
-    const mode = searchParams.get("mode");
-    if (mode === "signup") setActiveTab("signup");
-    if (mode === "signin") setActiveTab("signin");
-  }, [searchParams]);
-
   // Stashed credentials for the confirm flow (auto sign-in after verify)
   const [pendingEmail, setPendingEmail] = useState("");
   const [pendingPassword, setPendingPassword] = useState("");
-  const [pendingFirstName, setPendingFirstName] = useState("");
-  const [pendingLastName, setPendingLastName] = useState("");
 
   const loginForm = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -93,8 +84,8 @@ function AuthForm() {
       await signIn({ username: data.email, password: data.password });
       setSuccess("Success! Redirecting to dashboard...");
       setTimeout(() => router.push(redirectTo), 1500);
-    } catch (err: any) {
-      setError(err.message || "Invalid email or password.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Invalid email or password.");
       setIsLoading(false);
     }
   };
@@ -117,16 +108,14 @@ function AuthForm() {
 
       setPendingEmail(data.email);
       setPendingPassword(data.password);
-      setPendingFirstName(data.firstName);
-      setPendingLastName(data.lastName);
 
       confirmForm.setValue("email", data.email);
 
       setSuccess("Verification code sent to your email!");
       setActiveTab("confirm");
       setIsLoading(false);
-    } catch (err: any) {
-      setError(err.message || "Failed to create account.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create account.");
       setIsLoading(false);
     }
   };
@@ -144,8 +133,8 @@ function AuthForm() {
 
       setSuccess("Account verified! Welcome to SubTrak.");
       setTimeout(() => router.push("/dashboard"), 1500);
-    } catch (err: any) {
-      setError(err.message || "Invalid confirmation code.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Invalid confirmation code.");
       setIsLoading(false);
     }
   };
@@ -156,8 +145,8 @@ function AuthForm() {
       const email = confirmForm.getValues("email") || pendingEmail;
       await resendSignUpCode({ username: email });
       setSuccess("New code sent!");
-    } catch (err: any) {
-      setError(err.message || "Failed to resend code.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to resend code.");
     }
   };
 

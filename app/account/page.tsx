@@ -22,6 +22,7 @@ import {
   Check,
   Calendar,
   RefreshCw,
+  type LucideProps,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -115,10 +116,10 @@ export default function AccountPage() {
     setResending(true);
     try {
       await sendUserAttributeVerificationCode({ userAttributeKey: "email" });
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Error",
-        description: err.message || "Failed to resend code",
+        description: err instanceof Error ? err.message : "Failed to resend code",
         variant: "destructive",
       });
     } finally {
@@ -583,7 +584,7 @@ export default function AccountPage() {
   );
 }
 
-function CheckCircle2(props: any) {
+function CheckCircle2(props: LucideProps) {
   return (
     <svg
       {...props}
